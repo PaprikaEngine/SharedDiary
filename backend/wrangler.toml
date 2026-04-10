@@ -1,0 +1,18 @@
+name = "shared-diary-api"
+main = "build/worker/shim.mjs"
+compatibility_date = "2025-04-01"
+
+[build]
+command = "cargo install -q worker-build && worker-build --release"
+
+[vars]
+ENVIRONMENT = "development"
+
+# R2 bucket binding
+# Create bucket first: wrangler r2 bucket create shared-diary-media
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "shared-diary-media"
+
+# CORS settings for R2
+# Configure in Cloudflare dashboard: R2 > Bucket > Settings > CORS
