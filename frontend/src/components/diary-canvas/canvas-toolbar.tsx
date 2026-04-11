@@ -1,6 +1,7 @@
 "use client";
 
 import { PEN_COLORS } from "./diary-canvas";
+import { FONT_OPTIONS, type FontId, type TextAlign } from "./text-box-overlay";
 
 export type Tool = "pen" | "eraser" | "text";
 export type PenColor = "black" | "blue" | "red" | "green" | "orange" | "purple";
@@ -14,11 +15,17 @@ type Props = {
   onLineWidthChange: (index: number) => void;
   fontSizeIndex: number;
   onFontSizeChange: (index: number) => void;
+  fontFamily: FontId;
+  onFontFamilyChange: (font: FontId) => void;
+  textAlign: TextAlign;
+  onTextAlignChange: (align: TextAlign) => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
   onClear: () => void;
+  onStampClick?: () => void;
+  stampCount?: number;
 };
 
 const LINE_WIDTH_LABELS = ["細", "中", "太"];
@@ -33,11 +40,17 @@ export function CanvasToolbar({
   onLineWidthChange,
   fontSizeIndex,
   onFontSizeChange,
+  fontFamily,
+  onFontFamilyChange,
+  textAlign,
+  onTextAlignChange,
   canUndo,
   canRedo,
   onUndo,
   onRedo,
   onClear,
+  onStampClick,
+  stampCount = 0,
 }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2 mb-3 p-3 bg-white border border-cream-dark rounded-lg">
@@ -74,6 +87,27 @@ export function CanvasToolbar({
             <line x1="12" y1="4" x2="12" y2="20" />
           </svg>
         </ToolButton>
+        {onStampClick && (
+          <ToolButton
+            active={false}
+            onClick={onStampClick}
+            title="スタンプ"
+          >
+            <span className="relative">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                <line x1="9" y1="9" x2="9.01" y2="9" />
+                <line x1="15" y1="9" x2="15.01" y2="9" />
+              </svg>
+              {stampCount > 0 && (
+                <span className="absolute -top-2 -right-2 bg-moss text-cream text-[10px] rounded-full w-4 h-4 flex items-center justify-center">
+                  {stampCount}
+                </span>
+              )}
+            </span>
+          </ToolButton>
+        )}
       </div>
 
       <Separator />
@@ -98,25 +132,97 @@ export function CanvasToolbar({
 
       <Separator />
 
-      {/* Line width (pen/eraser) or font size (text) */}
+      {/* Line width (pen/eraser) or font size + font + align (text) */}
       {tool === "text" ? (
-        <div className="flex items-center gap-1">
-          <span className="text-xs text-ink-light mr-1">文字</span>
-          {FONT_SIZE_LABELS.map((label, i) => (
+        <>
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-ink-light mr-1">文字</span>
+            {FONT_SIZE_LABELS.map((label, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => onFontSizeChange(i)}
+                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                  fontSizeIndex === i
+                    ? "bg-moss text-cream"
+                    : "bg-cream-dark text-ink hover:bg-cream-dark/70"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <Separator />
+
+          {/* Font family */}
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-ink-light mr-1">書体</span>
+            {FONT_OPTIONS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => onFontFamilyChange(f.id)}
+                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                  fontFamily === f.id
+                    ? "bg-moss text-cream"
+                    : "bg-cream-dark text-ink hover:bg-cream-dark/70"
+                }`}
+                style={{ fontFamily: f.css }}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          <Separator />
+
+          {/* Text alignment */}
+          <div className="flex items-center gap-1">
             <button
-              key={i}
               type="button"
-              onClick={() => onFontSizeChange(i)}
-              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                fontSizeIndex === i
+              onClick={() => onTextAlignChange("left")}
+              className={`px-2 py-1 rounded text-xs transition-colors ${
+                textAlign === "left"
                   ? "bg-moss text-cream"
                   : "bg-cream-dark text-ink hover:bg-cream-dark/70"
               }`}
+              title="左揃え"
             >
-              {label}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="15" y2="12" /><line x1="3" y1="18" x2="18" y2="18" />
+              </svg>
             </button>
-          ))}
-        </div>
+            <button
+              type="button"
+              onClick={() => onTextAlignChange("center")}
+              className={`px-2 py-1 rounded text-xs transition-colors ${
+                textAlign === "center"
+                  ? "bg-moss text-cream"
+                  : "bg-cream-dark text-ink hover:bg-cream-dark/70"
+              }`}
+              title="中央揃え"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="3" y1="6" x2="21" y2="6" /><line x1="6" y1="12" x2="18" y2="12" /><line x1="4" y1="18" x2="20" y2="18" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => onTextAlignChange("right")}
+              className={`px-2 py-1 rounded text-xs transition-colors ${
+                textAlign === "right"
+                  ? "bg-moss text-cream"
+                  : "bg-cream-dark text-ink hover:bg-cream-dark/70"
+              }`}
+              title="右揃え"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="3" y1="6" x2="21" y2="6" /><line x1="9" y1="12" x2="21" y2="12" /><line x1="6" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </>
       ) : (
         <div className="flex items-center gap-1">
           <span className="text-xs text-ink-light mr-1">線</span>

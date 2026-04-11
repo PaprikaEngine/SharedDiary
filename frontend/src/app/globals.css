@@ -1,13 +1,55 @@
 @import "tailwindcss";
 
-:root {
-  --color-cream: #FDF6E3;
-  --color-cream-dark: #F5E6C8;
-  --color-moss: #5D7052;
-  --color-moss-light: #7A9B6D;
-  --color-moss-dark: #4A5A42;
-  --color-ink: #2C2C2C;
-  --color-ink-light: #4A4A4A;
+@layer base {
+  :root {
+    /* --- SharedDiary brand palette --- */
+    --color-cream: #FAF6EF;
+    --color-cream-dark: #EDE4D3;
+    --color-moss: #5B7A5E;
+    --color-moss-light: #7FA882;
+    --color-moss-dark: #3E5A40;
+    --color-ink: #2A2520;
+    --color-ink-light: #6B6460;
+    --color-coral: #D4836B;
+    --color-coral-light: #E8A894;
+
+    /* --- shadcn semantic tokens --- */
+    --radius: 0.625rem;
+    --background: oklch(0.97 0.008 75);
+    --foreground: oklch(0.20 0.015 50);
+    --card: oklch(0.985 0.005 80);
+    --card-foreground: oklch(0.20 0.015 50);
+    --popover: oklch(0.985 0.005 80);
+    --popover-foreground: oklch(0.20 0.015 50);
+    --primary: oklch(0.48 0.07 145);
+    --primary-foreground: oklch(0.97 0.008 75);
+    --secondary: oklch(0.92 0.015 75);
+    --secondary-foreground: oklch(0.30 0.015 50);
+    --muted: oklch(0.92 0.015 75);
+    --muted-foreground: oklch(0.48 0.015 50);
+    --accent: oklch(0.93 0.02 75);
+    --accent-foreground: oklch(0.25 0.015 50);
+    --destructive: oklch(0.58 0.18 22);
+    --destructive-foreground: oklch(0.97 0.008 75);
+    --border: oklch(0.88 0.015 70);
+    --input: oklch(0.88 0.015 70);
+    --ring: oklch(0.48 0.07 145);
+
+    --chart-1: oklch(0.55 0.10 140);
+    --chart-2: oklch(0.60 0.10 170);
+    --chart-3: oklch(0.50 0.08 50);
+    --chart-4: oklch(0.65 0.12 80);
+    --chart-5: oklch(0.50 0.15 25);
+
+    --sidebar-background: oklch(0.97 0.01 90);
+    --sidebar-foreground: oklch(0.30 0.01 50);
+    --sidebar-primary: oklch(0.48 0.07 145);
+    --sidebar-primary-foreground: oklch(0.97 0.01 90);
+    --sidebar-accent: oklch(0.93 0.02 85);
+    --sidebar-accent-foreground: oklch(0.30 0.01 50);
+    --sidebar-border: oklch(0.90 0.02 80);
+    --sidebar-ring: oklch(0.48 0.07 145);
+  }
 }
 
 @theme inline {
@@ -18,11 +60,136 @@
   --color-moss-dark: var(--color-moss-dark);
   --color-ink: var(--color-ink);
   --color-ink-light: var(--color-ink-light);
+  --color-coral: var(--color-coral);
+  --color-coral-light: var(--color-coral-light);
+
   --font-serif: var(--font-noto-serif-jp), var(--font-lora), serif;
+  --font-maru: var(--font-zen-maru-gothic), sans-serif;
+  --font-handwriting: var(--font-yomogi), cursive;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar-background: var(--sidebar-background);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius: var(--radius);
 }
 
+/* --- Base --- */
 body {
   background: var(--color-cream);
   color: var(--color-ink);
   font-family: var(--font-serif);
 }
+
+/* --- Paper / notebook textures --- */
+.paper {
+  background-color: var(--card);
+  background-image:
+    repeating-linear-gradient(
+      transparent,
+      transparent 31px,
+      #C8D8E4 31px,
+      #C8D8E4 32px
+    );
+  background-position-y: 8px;
+}
+
+.paper-plain {
+  background-color: var(--card);
+  box-shadow:
+    0 1px 3px rgba(0,0,0,0.06),
+    0 0 0 1px rgba(0,0,0,0.04);
+}
+
+.page-shadow {
+  box-shadow:
+    2px 2px 8px rgba(42,37,32,0.06),
+    0 0 0 1px rgba(42,37,32,0.04);
+}
+
+/* Tape decoration */
+.tape::before {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-2deg);
+  width: 80px;
+  height: 24px;
+  background: rgba(213,196,161,0.55);
+  border-radius: 2px;
+  z-index: 1;
+}
+
+/* Stitch border */
+.stitch {
+  border: 2px dashed var(--color-cream-dark);
+}
+
+/* Washi tape button hover */
+.washi-hover {
+  position: relative;
+}
+.washi-hover::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(91,122,94,0.08), rgba(212,131,107,0.08));
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+.washi-hover:hover::after {
+  opacity: 1;
+}
+
+/* Handwriting animation */
+@keyframes write-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-write-in {
+  animation: write-in 0.4s ease-out both;
+}
+
+/* Stagger children */
+.stagger-children > * {
+  animation: write-in 0.35s ease-out both;
+}
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 60ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 180ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 240ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 300ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 360ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 420ms; }

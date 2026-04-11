@@ -162,6 +162,116 @@ export interface Database {
           height?: number | null;
         };
       };
+      stamps: {
+        Row: {
+          id: string;
+          name: string;
+          type: "lottie" | "apng" | "webp";
+          url: string;
+          thumbnail_url: string | null;
+          scope: "builtin" | "group";
+          group_id: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          type: "lottie" | "apng" | "webp";
+          url: string;
+          thumbnail_url?: string | null;
+          scope?: "builtin" | "group";
+          group_id?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          type?: "lottie" | "apng" | "webp";
+          url?: string;
+          thumbnail_url?: string | null;
+          scope?: "builtin" | "group";
+          group_id?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+      };
+      entry_stamps: {
+        Row: {
+          id: string;
+          entry_id: string;
+          stamp_id: string;
+          x: number;
+          y: number;
+          scale: number;
+          rotation: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          entry_id: string;
+          stamp_id: string;
+          x: number;
+          y: number;
+          scale?: number;
+          rotation?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          entry_id?: string;
+          stamp_id?: string;
+          x?: number;
+          y?: number;
+          scale?: number;
+          rotation?: number;
+          created_at?: string;
+        };
+      };
+      reactions: {
+        Row: {
+          entry_id: string;
+          user_id: string;
+          stamp_id: string;
+          created_at: string;
+        };
+        Insert: {
+          entry_id: string;
+          user_id: string;
+          stamp_id: string;
+          created_at?: string;
+        };
+        Update: {
+          entry_id?: string;
+          user_id?: string;
+          stamp_id?: string;
+          created_at?: string;
+        };
+      };
+      notification_preferences: {
+        Row: {
+          user_id: string;
+          email_enabled: boolean;
+          push_enabled: boolean;
+          push_subscription: Json | null;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          email_enabled?: boolean;
+          push_enabled?: boolean;
+          push_subscription?: Json | null;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          email_enabled?: boolean;
+          push_enabled?: boolean;
+          push_subscription?: Json | null;
+          updated_at?: string;
+        };
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
