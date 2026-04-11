@@ -2,8 +2,14 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function Home() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch {
+    // Supabase unavailable — show logged-out state
+  }
 
   return (
     <div className="flex flex-col flex-1 items-center justify-center px-6">

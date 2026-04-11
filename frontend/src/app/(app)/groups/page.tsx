@@ -2,23 +2,47 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 
+const isDemo = process.env.NEXT_PUBLIC_SUPABASE_URL === "https://demo.supabase.co";
+
 export default async function GroupsPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  type GroupWithHolder = {
+    id: string;
+    name: string;
+    current_holder: { name: string } | null;
+  };
 
-  if (!user) {
-    redirect("/login");
+  let groups: GroupWithHolder[] | null = null;
+
+  if (isDemo) {
+    groups = [
+      { id: "demo-1", name: "高校の友達との日記", current_holder: { name: "ともだち" } },
+      { id: "demo-2", name: "大学サークルの交換日記", current_holder: { name: "あなた" } },
+    ];
+  } else {
+    try {
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        redirect("/login");
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: groupsData } = await (supabase as any)
+        .from("groups")
+        .select(`
+          *,
+          group_members!inner(user_id),
+          current_holder:users!groups_current_baton_holder_id_fkey(name)
+        `)
+        .eq("group_members.user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      groups = groupsData as GroupWithHolder[] | null;
+    } catch (e) {
+      if ((e as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT")) throw e;
+    }
   }
-
-  const { data: groups } = await supabase
-    .from("groups")
-    .select(`
-      *,
-      group_members!inner(user_id),
-      current_holder:users!groups_current_baton_holder_id_fkey(name)
-    `)
-    .eq("group_members.user_id", user.id)
-    .order("created_at", { ascending: false });
 
   return (
     <div className="min-h-screen">
