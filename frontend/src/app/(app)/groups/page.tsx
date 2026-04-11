@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, Settings } from "lucide-react";
 
 const isDemo = process.env.NEXT_PUBLIC_SUPABASE_URL === "https://demo.supabase.co";
 
@@ -47,12 +47,17 @@ export default async function GroupsPage() {
           <h1 className="text-lg font-bold text-moss" style={{ fontFamily: "var(--font-handwriting)" }}>
             SharedDiary
           </h1>
-          <Button asChild size="sm" className="bg-moss hover:bg-moss-dark rounded-full h-8 px-3 text-xs">
-            <Link href="/groups/new">
-              <Plus className="size-3.5" />
-              新しい日記帳
+          <div className="flex items-center gap-2">
+            <Link href="/settings" className="text-ink-light hover:text-ink transition-colors p-1.5">
+              <Settings className="size-4" />
             </Link>
-          </Button>
+            <Button asChild size="sm" className="bg-moss hover:bg-moss-dark rounded-full h-8 px-3 text-xs">
+              <Link href="/groups/new">
+                <Plus className="size-3.5" />
+                新しい日記帳
+              </Link>
+            </Button>
+          </div>
         </div>
       </header>
 

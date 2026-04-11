@@ -6,14 +6,17 @@ import Link from "next/link";
 import Image from "next/image";
 import imageCompression from "browser-image-compression";
 import { createClient } from "@/lib/supabase/client";
+import { validateVideo } from "@/lib/video-utils";
+import { triggerBatonNotification } from "@/lib/notifications";
 import { DiaryCanvas } from "@/components/diary-canvas";
 import type { DiaryCanvasHandle } from "@/components/diary-canvas";
 import { StampPicker, StampOverlayEditor, MAX_STAMPS } from "@/components/stamps";
 import type { PlacedStamp } from "@/components/stamps";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ImagePlus, Loader2, X } from "lucide-react";
+import { ArrowLeft, ImagePlus, Film, Loader2, X } from "lucide-react";
 
 type ImagePreview = { id: string; file: File; preview: string };
+type VideoPreview = { id: string; file: File; preview: string; duration: number };
 
 export default function NewEntryPage() {
   const params = useParams();
@@ -24,10 +27,12 @@ export default function NewEntryPage() {
   const [nextBatonHolder, setNextBatonHolder] = useState<string | null>(null);
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
   const [membersLoaded, setMembersLoaded] = useState(false);
+  const [videos, setVideos] = useState<VideoPreview[]>([]);
   const [placedStamps, setPlacedStamps] = useState<PlacedStamp[]>([]);
   const [showStampPicker, setShowStampPicker] = useState(false);
   const [canvasScale, setCanvasScale] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<DiaryCanvasHandle>(null);
   const router = useRouter();
   const supabase = createClient();
@@ -69,11 +74,28 @@ export default function NewEntryPage() {
     setImages((prev) => { const img = prev.find((i) => i.id === id); if (img) URL.revokeObjectURL(img.preview); return prev.filter((i) => i.id !== id); });
   };
 
+  const handleVideoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    for (let i = 0; i < files.length && videos.length + i < 3; i++) {
+      const file = files[i];
+      const result = await validateVideo(file);
+      if (!result.valid) { setError(result.error); continue; }
+      const preview = URL.createObjectURL(file);
+      setVideos((prev) => prev.length >= 3 ? prev : [...prev, { id: crypto.randomUUID(), file, preview, duration: result.duration }]);
+    }
+    if (videoInputRef.current) videoInputRef.current.value = "";
+  };
+
+  const removeVideo = (id: string) => {
+    setVideos((prev) => { const v = prev.find((i) => i.id === id); if (v) URL.revokeObjectURL(v.preview); return prev.filter((i) => i.id !== id); });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     const canvasEmpty = canvasRef.current?.isEmpty() ?? true;
-    if (canvasEmpty && images.length === 0 && placedStamps.length === 0) { setError("日記を書くか画像やスタンプを追加してください"); return; }
+    if (canvasEmpty && images.length === 0 && videos.length === 0 && placedStamps.length === 0) { setError("日記を書くか画像・動画・スタンプを追加してください"); return; }
     if (!nextBatonHolder) { setError("次のバトンを渡す人を選んでください"); return; }
     setLoading(true);
 
@@ -107,6 +129,17 @@ export default function NewEntryPage() {
       await (supabase as any).from("entry_media").insert({ entry_id: entry.id, type: "image", url: publicUrl, order: (canvasEmpty ? 0 : 1) + i });
     }
 
+    const videoOrderStart = (canvasEmpty ? 0 : 1) + images.length;
+    for (let i = 0; i < videos.length; i++) {
+      const vid = videos[i];
+      const path = `${groupId}/${entry.id}/video/${vid.id}`;
+      const { error: upErr } = await supabase.storage.from("media").upload(path, vid.file, { contentType: vid.file.type });
+      if (upErr) { console.error(upErr); continue; }
+      const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(path);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("entry_media").insert({ entry_id: entry.id, type: "video", url: publicUrl, order: videoOrderStart + i });
+    }
+
     if (placedStamps.length > 0) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any).from("entry_stamps").insert(placedStamps.map((s) => ({ entry_id: entry.id, stamp_id: s.stampId, x: s.x, y: s.y, scale: s.scale, rotation: s.rotation })));
@@ -114,6 +147,8 @@ export default function NewEntryPage() {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any).from("groups").update({ current_baton_holder_id: nextBatonHolder }).eq("id", groupId);
+    // Fire-and-forget notification
+    triggerBatonNotification(groupId, nextBatonHolder);
     router.push(`/groups/${groupId}`);
     router.refresh();
   };
@@ -178,6 +213,33 @@ export default function NewEntryPage() {
               )}
             </div>
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} className="hidden" />
+          </div>
+
+          {/* Videos */}
+          <div className="paper-plain rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-ink-light">動画を添付</span>
+              <span className="text-xs text-ink-light/50">{videos.length}/3</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {videos.map((vid) => (
+                <div key={vid.id} className="relative aspect-video group rounded-lg overflow-hidden bg-ink/5">
+                  <video src={vid.preview} className="w-full h-full object-cover" preload="metadata" muted />
+                  <div className="absolute bottom-1 left-1 bg-ink/60 text-white text-[10px] px-1.5 py-0.5 rounded">
+                    {Math.floor(vid.duration / 60)}:{String(Math.floor(vid.duration % 60)).padStart(2, "0")}
+                  </div>
+                  <button type="button" onClick={() => removeVideo(vid.id)} className="absolute top-1 right-1 size-5 bg-ink/70 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <X className="size-3" />
+                  </button>
+                </div>
+              ))}
+              {videos.length < 3 && (
+                <button type="button" onClick={() => videoInputRef.current?.click()} className="aspect-video border border-dashed border-cream-dark rounded-lg flex items-center justify-center hover:border-moss/40 transition-colors">
+                  <Film className="size-4 text-ink-light/40" />
+                </button>
+              )}
+            </div>
+            <input ref={videoInputRef} type="file" accept="video/mp4,video/webm" multiple onChange={handleVideoSelect} className="hidden" />
           </div>
 
           {/* Baton */}

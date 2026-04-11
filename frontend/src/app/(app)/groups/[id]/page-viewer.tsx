@@ -120,11 +120,17 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
         {sortedMedia.length > 0 && (
           <div className="pl-5 sm:pl-8 mb-6">
             <div className={`grid gap-3 ${sortedMedia.length === 1 ? "grid-cols-1 max-w-md" : "grid-cols-2"}`}>
-              {sortedMedia.map((media) => (
-                <div key={media.id} className="relative aspect-square rounded-lg overflow-hidden bg-cream-dark/30">
-                  <Image src={media.url} alt="" fill className="object-cover" />
-                </div>
-              ))}
+              {sortedMedia.map((media) =>
+                media.type === "video" ? (
+                  <div key={media.id} className="relative rounded-lg overflow-hidden bg-ink/5">
+                    <video src={media.url} controls preload="metadata" playsInline className="w-full max-h-80 rounded-lg" />
+                  </div>
+                ) : (
+                  <div key={media.id} className="relative aspect-square rounded-lg overflow-hidden bg-cream-dark/30">
+                    <Image src={media.url} alt="" fill className="object-cover" />
+                  </div>
+                )
+              )}
             </div>
           </div>
         )}
