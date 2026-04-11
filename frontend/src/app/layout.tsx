@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Noto_Serif_JP, Lora, Zen_Maru_Gothic, Yomogi } from "next/font/google";
 import "./globals.css";
 
@@ -30,7 +30,6 @@ export const metadata: Metadata = {
   title: "SharedDiary - 交換日記",
   description: "懐かしい交換日記を、もう一度。",
   manifest: "/manifest.json",
-  themeColor: "#5B7A5E",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -40,6 +39,10 @@ export const metadata: Metadata = {
     icon: "/icon.svg",
     apple: "/icon.svg",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#5B7A5E",
 };
 
 export default function RootLayout({
