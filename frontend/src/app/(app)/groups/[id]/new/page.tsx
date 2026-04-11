@@ -25,19 +25,9 @@ export default function NewEntryPage() {
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
   const [membersLoaded, setMembersLoaded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<DiaryCanvasHandle>(null);
   const router = useRouter();
   const supabase = createClient();
-
-  // Get canvas handle from the container element
-  const getCanvasHandle = (): DiaryCanvasHandle | null => {
-    const container = canvasContainerRef.current?.querySelector(
-      "[data-diary-canvas]"
-    );
-    if (!container) return null;
-    return (container as unknown as Record<string, DiaryCanvasHandle>)
-      .__diaryCanvas;
-  };
 
   // Load members on mount
   useEffect(() => {
@@ -122,8 +112,7 @@ export default function NewEntryPage() {
     e.preventDefault();
     setError(null);
 
-    const handle = getCanvasHandle();
-    const canvasEmpty = handle?.isEmpty() ?? true;
+    const canvasEmpty = canvasRef.current?.isEmpty() ?? true;
 
     if (canvasEmpty && images.length === 0) {
       setError("日記を書くか画像を追加してください");
@@ -165,8 +154,8 @@ export default function NewEntryPage() {
     }
 
     // Export and upload canvas image
-    if (!canvasEmpty && handle) {
-      const blob = await handle.exportImage();
+    if (!canvasEmpty && canvasRef.current) {
+      const blob = await canvasRef.current.exportImage();
       if (blob) {
         const canvasPath = `${groupId}/${entry.id}/canvas.png`;
         const { error: uploadError } = await supabase.storage
@@ -250,9 +239,7 @@ export default function NewEntryPage() {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Canvas Editor */}
-          <div ref={canvasContainerRef}>
-            <DiaryCanvas width={800} height={600} />
-          </div>
+          <DiaryCanvas ref={canvasRef} width={800} height={600} />
 
           {/* Photo Attachments */}
           <div>
