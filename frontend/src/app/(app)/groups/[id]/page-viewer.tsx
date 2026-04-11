@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { EntryStampsDisplay } from "./entries/[entryId]/entry-stamps-display";
 import { ReactionBar } from "./entries/[entryId]/reaction-bar";
+import { FlipbookPlayer } from "@/components/flipbook";
 
 type EntryData = {
   id: string;
@@ -15,6 +16,7 @@ type EntryData = {
   media: { id: string; type: string; url: string; order: number; width: number | null; height: number | null }[] | null;
   stamps: { id: string; x: number; y: number; scale: number; rotation: number; stamp: { url: string; thumbnail_url: string | null } }[];
   reactions: { stamp_id: string; user_id: string; stamp: { id: string; name: string; url: string; thumbnail_url: string | null } }[];
+  flipbook: { fps: number; loop: boolean; frames: { order: number; canvasJson: string }[] } | null;
 };
 
 type Props = {
@@ -139,6 +141,19 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
         {entry.stamps.length > 0 && sortedMedia.length > 0 && (
           <div className="pl-5 sm:pl-8">
             <EntryStampsDisplay stamps={entry.stamps} canvasWidth={800} canvasHeight={600} />
+          </div>
+        )}
+
+        {/* Flipbook animation */}
+        {entry.flipbook && entry.flipbook.frames.length > 0 && (
+          <div className="pl-5 sm:pl-8 mb-6">
+            <p className="text-[10px] text-ink-light/40 mb-1.5 uppercase tracking-wider">パラパラアニメ</p>
+            <FlipbookPlayer
+              frames={entry.flipbook.frames}
+              fps={entry.flipbook.fps}
+              loop={entry.flipbook.loop}
+              width={Math.min(400, 800 * 0.6)}
+            />
           </div>
         )}
 

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { EntryStampsDisplay } from "./entry-stamps-display";
 import { ReactionBar } from "./reaction-bar";
+import { FlipbookPlayer } from "@/components/flipbook";
 
 type Props = { params: Promise<{ id: string; entryId: string }> };
 const isDemo = process.env.NEXT_PUBLIC_SUPABASE_URL === "https://demo.supabase.co";
@@ -30,6 +31,7 @@ export default async function EntryPage({ params }: Props) {
   let nextEntry: { id: string } | null = null;
   let entryStamps: EntryStampData[] = [];
   let reactions: ReactionData[] = [];
+  let flipbook: { fps: number; loop: boolean; frames: { order: number; canvasJson: string }[] } | null = null;
   let currentUserId: string | null = null;
 
   if (!isDemo) {
@@ -57,6 +59,10 @@ export default async function EntryPage({ params }: Props) {
 
       const { data: rd } = await supabase.from("reactions").select(`stamp_id, user_id, stamp:stamps(id, name, url, thumbnail_url)`).eq("entry_id", entryId);
       if (rd) reactions = rd as unknown as ReactionData[];
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: fd } = await (supabase as any).from("flipbooks").select(`fps, loop, frames:flipbook_frames(order, canvas_json)`).eq("entry_id", entryId).single();
+      if (fd) flipbook = { fps: fd.fps, loop: fd.loop, frames: (fd.frames as { order: number; canvas_json: string }[]).map((fr) => ({ order: fr.order, canvasJson: fr.canvas_json })) };
     } catch (e) {
       if ((e as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT")) throw e;
     }
@@ -128,6 +134,19 @@ export default async function EntryPage({ params }: Props) {
           {entryStamps.length > 0 && sortedMedia.length > 0 && (
             <div className="pl-6">
               <EntryStampsDisplay stamps={entryStamps} canvasWidth={800} canvasHeight={600} />
+            </div>
+          )}
+
+          {/* Flipbook animation */}
+          {flipbook && flipbook.frames.length > 0 && (
+            <div className="pl-6 mb-5">
+              <p className="text-[10px] text-ink-light/40 mb-1.5 uppercase tracking-wider">パラパラアニメ</p>
+              <FlipbookPlayer
+                frames={flipbook.frames}
+                fps={flipbook.fps}
+                loop={flipbook.loop}
+                width={Math.min(360, 800 * 0.5)}
+              />
             </div>
           )}
         </article>

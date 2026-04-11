@@ -43,24 +43,27 @@ export default async function GroupPage({ params }: Props) {
   let hasBaton = true;
   let currentUserId: string | null = null;
 
+  type FlipbookRow = { fps: number; loop: boolean; frames: { order: number; canvas_json: string }[] };
+
   // Entries with full data for page viewer
   type EntryData = {
     id: string; body: string | null; created_at: string;
     author: { id: string; name: string; avatar_url: string | null } | null;
     media: { id: string; type: string; url: string; order: number; width: number | null; height: number | null }[] | null;
     stamps: StampRow[]; reactions: ReactionRow[];
+    flipbook: { fps: number; loop: boolean; frames: { order: number; canvasJson: string }[] } | null;
   };
 
   let entries: EntryData[] = [
     {
       id: "demo-1", body: "今日はいい天気だったね！公園でアイスを食べたよ\n\nまた明日も遊ぼうね。",
       created_at: new Date().toISOString(),
-      author: { id: "2", name: "ともだち", avatar_url: null }, media: null, stamps: [], reactions: [],
+      author: { id: "2", name: "ともだち", avatar_url: null }, media: null, stamps: [], reactions: [], flipbook: null,
     },
     {
       id: "demo-2", body: "昨日は映画を見に行ったよ。すごくおもしろかった！また一緒に行こう",
       created_at: "2026-04-11T00:00:00.000Z",
-      author: { id: "1", name: "あなた", avatar_url: null }, media: null, stamps: [], reactions: [],
+      author: { id: "1", name: "あなた", avatar_url: null }, media: null, stamps: [], reactions: [], flipbook: null,
     },
   ];
 
@@ -94,6 +97,8 @@ export default async function GroupPage({ params }: Props) {
       let allStamps: (StampRow & { entry_id: string })[] = [];
       let allReactions: (ReactionRow & { entry_id: string })[] = [];
 
+      let allFlipbooks: (FlipbookRow & { entry_id: string })[] = [];
+
       if (entryIds.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: sd } = await (supabase as any).from("entry_stamps").select(`id, entry_id, x, y, scale, rotation, stamp:stamps(url, thumbnail_url)`).in("entry_id", entryIds);
@@ -102,13 +107,21 @@ export default async function GroupPage({ params }: Props) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: rd } = await (supabase as any).from("reactions").select(`entry_id, stamp_id, user_id, stamp:stamps(id, name, url, thumbnail_url)`).in("entry_id", entryIds);
         if (rd) allReactions = rd as (ReactionRow & { entry_id: string })[];
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: fd } = await (supabase as any).from("flipbooks").select(`entry_id, fps, loop, frames:flipbook_frames(order, canvas_json)`).in("entry_id", entryIds);
+        if (fd) allFlipbooks = fd as (FlipbookRow & { entry_id: string })[];
       }
 
-      entries = rawEntries.map((e) => ({
-        ...e,
-        stamps: allStamps.filter((s) => s.entry_id === e.id),
-        reactions: allReactions.filter((r) => r.entry_id === e.id),
-      }));
+      entries = rawEntries.map((e) => {
+        const fb = allFlipbooks.find((f) => f.entry_id === e.id);
+        return {
+          ...e,
+          stamps: allStamps.filter((s) => s.entry_id === e.id),
+          reactions: allReactions.filter((r) => r.entry_id === e.id),
+          flipbook: fb ? { fps: fb.fps, loop: fb.loop, frames: fb.frames.map((fr) => ({ order: fr.order, canvasJson: fr.canvas_json })) } : null,
+        };
+      });
 
       isOwner = (membershipData as { role: string }).role === "owner";
       hasBaton = group.current_baton_holder_id === user.id;

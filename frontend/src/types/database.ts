@@ -249,6 +249,52 @@ export interface Database {
           created_at?: string;
         };
       };
+      flipbooks: {
+        Row: {
+          id: string;
+          entry_id: string;
+          fps: number;
+          loop: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          entry_id: string;
+          fps?: number;
+          loop?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          entry_id?: string;
+          fps?: number;
+          loop?: boolean;
+          created_at?: string;
+        };
+      };
+      flipbook_frames: {
+        Row: {
+          id: string;
+          flipbook_id: string;
+          order: number;
+          canvas_json: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          flipbook_id: string;
+          order: number;
+          canvas_json: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          flipbook_id?: string;
+          order?: number;
+          canvas_json?: string;
+          created_at?: string;
+        };
+      };
       notification_preferences: {
         Row: {
           user_id: string;

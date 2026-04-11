@@ -12,8 +12,9 @@ import { DiaryCanvas } from "@/components/diary-canvas";
 import type { DiaryCanvasHandle } from "@/components/diary-canvas";
 import { StampPicker, StampOverlayEditor, MAX_STAMPS } from "@/components/stamps";
 import type { PlacedStamp } from "@/components/stamps";
+import { FlipbookEditor, type FlipbookData } from "@/components/flipbook";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ImagePlus, Film, Loader2, X } from "lucide-react";
+import { ArrowLeft, ImagePlus, Film, BookOpen, Pencil, Loader2, X } from "lucide-react";
 
 type ImagePreview = { id: string; file: File; preview: string };
 type VideoPreview = { id: string; file: File; preview: string; duration: number };
@@ -28,6 +29,8 @@ export default function NewEntryPage() {
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
   const [membersLoaded, setMembersLoaded] = useState(false);
   const [videos, setVideos] = useState<VideoPreview[]>([]);
+  const [flipbookData, setFlipbookData] = useState<FlipbookData | null>(null);
+  const [showFlipbookEditor, setShowFlipbookEditor] = useState(false);
   const [placedStamps, setPlacedStamps] = useState<PlacedStamp[]>([]);
   const [showStampPicker, setShowStampPicker] = useState(false);
   const [canvasScale, setCanvasScale] = useState(1);
@@ -95,7 +98,7 @@ export default function NewEntryPage() {
     e.preventDefault();
     setError(null);
     const canvasEmpty = canvasRef.current?.isEmpty() ?? true;
-    if (canvasEmpty && images.length === 0 && videos.length === 0 && placedStamps.length === 0) { setError("日記を書くか画像・動画・スタンプを追加してください"); return; }
+    if (canvasEmpty && images.length === 0 && videos.length === 0 && placedStamps.length === 0 && !flipbookData) { setError("日記を書くか画像・動画・スタンプ・パラパラアニメを追加してください"); return; }
     if (!nextBatonHolder) { setError("次のバトンを渡す人を選んでください"); return; }
     setLoading(true);
 
@@ -143,6 +146,18 @@ export default function NewEntryPage() {
     if (placedStamps.length > 0) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any).from("entry_stamps").insert(placedStamps.map((s) => ({ entry_id: entry.id, stamp_id: s.stampId, x: s.x, y: s.y, scale: s.scale, rotation: s.rotation })));
+    }
+
+    // Save flipbook animation
+    if (flipbookData && flipbookData.frames.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: fb } = await (supabase as any).from("flipbooks").insert({ entry_id: entry.id, fps: flipbookData.fps, loop: flipbookData.loop }).select().single();
+      if (fb) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("flipbook_frames").insert(
+          flipbookData.frames.map((f) => ({ flipbook_id: fb.id, order: f.order, canvas_json: f.canvasJson }))
+        );
+      }
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -241,6 +256,46 @@ export default function NewEntryPage() {
             </div>
             <input ref={videoInputRef} type="file" accept="video/mp4,video/webm" multiple onChange={handleVideoSelect} className="hidden" />
           </div>
+
+          {/* Flipbook */}
+          <div className="paper-plain rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-ink-light">パラパラアニメ</span>
+              {flipbookData && (
+                <span className="text-[10px] text-ink-light/50">{flipbookData.frames.length}フレーム / {flipbookData.fps}fps</span>
+              )}
+            </div>
+            {flipbookData ? (
+              <div className="flex items-center gap-3">
+                <div className="flex-1 flex items-center gap-2 bg-moss/5 rounded-lg px-3 py-2">
+                  <BookOpen className="size-4 text-moss shrink-0" />
+                  <span className="text-xs text-ink">{flipbookData.frames.length}フレームのアニメーション</span>
+                </div>
+                <button type="button" onClick={() => setShowFlipbookEditor(true)}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-moss hover:text-moss-dark transition-colors">
+                  <Pencil className="size-3" /> 編集
+                </button>
+                <button type="button" onClick={() => setFlipbookData(null)}
+                  className="size-6 flex items-center justify-center text-ink-light hover:text-red-500 transition-colors">
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button type="button" onClick={() => setShowFlipbookEditor(true)}
+                className="w-full flex items-center justify-center gap-2 py-3 border border-dashed border-cream-dark rounded-lg text-xs text-ink-light hover:border-moss/40 hover:text-moss transition-colors">
+                <BookOpen className="size-4" />
+                パラパラアニメを作る
+              </button>
+            )}
+          </div>
+
+          {showFlipbookEditor && (
+            <FlipbookEditor
+              initial={flipbookData ?? undefined}
+              onSave={(data) => { setFlipbookData(data); setShowFlipbookEditor(false); }}
+              onClose={() => setShowFlipbookEditor(false)}
+            />
+          )}
 
           {/* Baton */}
           <div className="paper-plain rounded-xl p-4">
