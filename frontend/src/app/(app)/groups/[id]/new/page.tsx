@@ -161,7 +161,7 @@ export default function NewEntryPage() {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from("groups").update({ current_baton_holder_id: nextBatonHolder }).eq("id", groupId);
+    await (supabase as any).from("groups").update({ current_baton_holder_id: nextBatonHolder, baton_passed_at: new Date().toISOString() }).eq("id", groupId);
     // Fire-and-forget notification
     triggerBatonNotification(groupId, nextBatonHolder);
     router.push(`/groups/${groupId}`);

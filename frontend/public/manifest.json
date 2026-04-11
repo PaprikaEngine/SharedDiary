@@ -1,0 +1,18 @@
+{
+  "name": "SharedDiary - 交換日記",
+  "short_name": "交換日記",
+  "description": "懐かしい交換日記を、もう一度。",
+  "start_url": "/groups",
+  "display": "standalone",
+  "background_color": "#FDF8F0",
+  "theme_color": "#5B7A5E",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ArrowLeft } from "lucide-react";
 import { InviteButton } from "./invite-button";
 import { PageViewer } from "./page-viewer";
+import { ExportPdfButton } from "@/components/export-pdf";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -19,6 +20,8 @@ export default async function GroupPage({ params }: Props) {
     name: string;
     current_baton_holder_id: string | null;
     current_holder: { id: string; name: string; avatar_url: string | null } | null;
+    baton_deadline_days: number;
+    baton_passed_at: string | null;
   };
   type Member = {
     role: "owner" | "member";
@@ -34,7 +37,7 @@ export default async function GroupPage({ params }: Props) {
   type StampRow = { id: string; x: number; y: number; scale: number; rotation: number; stamp: { url: string; thumbnail_url: string | null } };
   type ReactionRow = { stamp_id: string; user_id: string; stamp: { id: string; name: string; url: string; thumbnail_url: string | null } };
 
-  let group: Group = { id, name: "高校の友達との日記", current_baton_holder_id: "1", current_holder: { id: "1", name: "あなた", avatar_url: null } };
+  let group: Group = { id, name: "高校の友達との日記", current_baton_holder_id: "1", current_holder: { id: "1", name: "あなた", avatar_url: null }, baton_deadline_days: 3, baton_passed_at: new Date().toISOString() };
   let members: Member[] | null = [
     { role: "owner", user: { id: "1", name: "あなた", avatar_url: null } },
     { role: "member", user: { id: "2", name: "ともだち", avatar_url: null } },
@@ -130,6 +133,17 @@ export default async function GroupPage({ params }: Props) {
     }
   }
 
+  // Baton deadline calculation
+  const deadlineDays = group.baton_deadline_days;
+  const passedAt = group.baton_passed_at ? new Date(group.baton_passed_at) : null;
+  let daysLeft: number | null = null;
+  let isOverdue = false;
+  if (passedAt && deadlineDays > 0) {
+    const deadline = new Date(passedAt.getTime() + deadlineDays * 86400000);
+    daysLeft = Math.ceil((deadline.getTime() - Date.now()) / 86400000);
+    isOverdue = daysLeft < 0;
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header: group name + baton + members */}
@@ -153,17 +167,32 @@ export default async function GroupPage({ params }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-3 shrink-0">
-            {/* Baton inline */}
+            {/* Baton inline with deadline */}
             {group.current_holder && (
               hasBaton ? (
-                <Link href={`/groups/${id}/new`} className="text-xs font-medium text-white bg-moss hover:bg-moss-dark rounded-full px-3 py-1.5 transition-colors">
-                  ✏️ 書く
-                </Link>
+                <div className="flex items-center gap-2">
+                  {daysLeft !== null && (
+                    <span className={`text-[10px] ${isOverdue ? "text-red-500" : daysLeft <= 1 ? "text-orange-500" : "text-ink-light/50"}`}>
+                      {isOverdue ? "期限超過" : daysLeft === 0 ? "今日まで" : `あと${daysLeft}日`}
+                    </span>
+                  )}
+                  <Link href={`/groups/${id}/new`} className="text-xs font-medium text-white bg-moss hover:bg-moss-dark rounded-full px-3 py-1.5 transition-colors">
+                    ✏️ 書く
+                  </Link>
+                </div>
               ) : (
-                <span className="text-xs text-ink-light">🎀 {group.current_holder.name}さんの番</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-ink-light">🎀 {group.current_holder.name}さんの番</span>
+                  {daysLeft !== null && (
+                    <span className={`text-[10px] ${isOverdue ? "text-red-500" : daysLeft <= 1 ? "text-orange-500" : "text-ink-light/40"}`}>
+                      {isOverdue ? "(期限超過)" : daysLeft === 0 ? "(今日まで)" : `(あと${daysLeft}日)`}
+                    </span>
+                  )}
+                </div>
               )
             )}
             {isOwner && <InviteButton groupId={id} />}
+            <ExportPdfButton groupId={id} groupName={group.name} />
           </div>
         </div>
       </header>

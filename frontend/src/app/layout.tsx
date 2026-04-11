@@ -29,6 +29,17 @@ const yomogi = Yomogi({
 export const metadata: Metadata = {
   title: "SharedDiary - 交換日記",
   description: "懐かしい交換日記を、もう一度。",
+  manifest: "/manifest.json",
+  themeColor: "#5B7A5E",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "交換日記",
+  },
+  icons: {
+    icon: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

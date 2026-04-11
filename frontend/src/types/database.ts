@@ -43,6 +43,7 @@ export interface Database {
           created_by: string;
           baton_deadline_days: number;
           current_baton_holder_id: string | null;
+          baton_passed_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -52,6 +53,7 @@ export interface Database {
           created_by: string;
           baton_deadline_days?: number;
           current_baton_holder_id?: string | null;
+          baton_passed_at?: string | null;
           created_at?: string;
         };
         Update: {
@@ -61,6 +63,7 @@ export interface Database {
           created_by?: string;
           baton_deadline_days?: number;
           current_baton_holder_id?: string | null;
+          baton_passed_at?: string | null;
           created_at?: string;
         };
       };
