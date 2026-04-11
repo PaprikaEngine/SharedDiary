@@ -42,6 +42,7 @@ export interface Database {
           cover_image: string | null;
           created_by: string;
           baton_deadline_days: number;
+          current_baton_holder_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -50,6 +51,7 @@ export interface Database {
           cover_image?: string | null;
           created_by: string;
           baton_deadline_days?: number;
+          current_baton_holder_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -58,6 +60,7 @@ export interface Database {
           cover_image?: string | null;
           created_by?: string;
           baton_deadline_days?: number;
+          current_baton_holder_id?: string | null;
           created_at?: string;
         };
       };
@@ -81,13 +84,38 @@ export interface Database {
           joined_at?: string;
         };
       };
+      group_invitations: {
+        Row: {
+          id: string;
+          group_id: string;
+          token: string;
+          created_by: string;
+          expires_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          group_id: string;
+          token: string;
+          created_by: string;
+          expires_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          group_id?: string;
+          token?: string;
+          created_by?: string;
+          expires_at?: string | null;
+          created_at?: string;
+        };
+      };
       entries: {
         Row: {
           id: string;
           group_id: string;
           author_id: string;
           body: string | null;
-          current_baton_holder_id: string;
           created_at: string;
         };
         Insert: {
@@ -95,7 +123,6 @@ export interface Database {
           group_id: string;
           author_id: string;
           body?: string | null;
-          current_baton_holder_id: string;
           created_at?: string;
         };
         Update: {
@@ -103,7 +130,6 @@ export interface Database {
           group_id?: string;
           author_id?: string;
           body?: string | null;
-          current_baton_holder_id?: string;
           created_at?: string;
         };
       };

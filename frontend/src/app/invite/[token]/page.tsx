@@ -10,8 +10,16 @@ export default async function InvitePage({ params }: Props) {
   const { token } = await params;
   const supabase = await createClient();
 
+  type Invitation = {
+    id: string;
+    token: string;
+    expires_at: string | null;
+    group: { id: string; name: string } | null;
+  };
+
   // Get invitation details
-  const { data: invitation } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: invitationData } = await (supabase as any)
     .from("group_invitations")
     .select(`
       *,
@@ -19,6 +27,8 @@ export default async function InvitePage({ params }: Props) {
     `)
     .eq("token", token)
     .single();
+
+  const invitation = invitationData as Invitation | null;
 
   if (!invitation || !invitation.group) {
     return (
@@ -62,7 +72,8 @@ export default async function InvitePage({ params }: Props) {
   }
 
   // Check if already a member
-  const { data: membership } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: membership } = await (supabase as any)
     .from("group_members")
     .select("user_id")
     .eq("group_id", invitation.group.id)

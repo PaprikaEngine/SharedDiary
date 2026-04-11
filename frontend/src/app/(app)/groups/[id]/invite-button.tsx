@@ -23,7 +23,8 @@ export function InviteButton({ groupId }: Props) {
     // Generate a random token
     const token = crypto.randomUUID();
 
-    const { error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
       .from("group_invitations")
       .insert({
         group_id: groupId,

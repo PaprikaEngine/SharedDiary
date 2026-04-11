@@ -26,7 +26,8 @@ export function JoinGroupButton({ groupId }: Props) {
       return;
     }
 
-    const { error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
       .from("group_members")
       .insert({
         group_id: groupId,
