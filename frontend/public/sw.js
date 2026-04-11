@@ -1,7 +1,7 @@
 // Service Worker — Push Notifications + Offline Cache
 
 const CACHE_NAME = "shareddiary-v1";
-const PRECACHE_URLS = ["/", "/groups", "/icon.svg"];
+const PRECACHE_URLS = ["/", "/icon.svg"];
 
 // Install: precache shell
 self.addEventListener("install", (event) => {
@@ -22,6 +22,7 @@ self.addEventListener("activate", (event) => {
 });
 
 // Fetch: network-first with cache fallback
+// Only cache public/static assets — never cache authenticated page responses
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   // Skip non-GET and API/auth requests
@@ -29,10 +30,22 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) return;
 
+  // Only cache static assets and the public landing page — not authenticated routes
+  const isCacheable =
+    url.pathname === "/" ||
+    url.pathname === "/login" ||
+    url.pathname === "/signup" ||
+    url.pathname.startsWith("/_next/static/") ||
+    url.pathname.match(/\.(svg|png|jpg|jpeg|gif|webp|ico|woff2?|css|js)$/);
+
+  if (!isCacheable) {
+    // For authenticated pages, always go to network, no cache fallback
+    return;
+  }
+
   event.respondWith(
     fetch(request)
       .then((response) => {
-        // Cache successful same-origin responses
         if (response.ok && url.origin === self.location.origin) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));

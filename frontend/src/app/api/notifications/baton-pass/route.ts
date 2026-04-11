@@ -35,6 +35,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Not a group member" }, { status: 403 });
     }
 
+    // Verify nextHolderId is also a member of the group
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: nextHolderMembership } = await (supabase as any)
+      .from("group_members")
+      .select("user_id")
+      .eq("group_id", groupId)
+      .eq("user_id", nextHolderId)
+      .single();
+    if (!nextHolderMembership) {
+      return NextResponse.json({ error: "Next holder is not a group member" }, { status: 400 });
+    }
+
     // Fetch context: group name, sender name, next holder's email & prefs
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const c = supabase as any;

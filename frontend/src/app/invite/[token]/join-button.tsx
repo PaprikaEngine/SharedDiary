@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react";
 
 type Props = { groupId: string; token: string };
 
-export function JoinGroupButton({ groupId }: Props) {
+export function JoinGroupButton({ groupId, token }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -20,8 +20,9 @@ export function JoinGroupButton({ groupId }: Props) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setError("ログインが必要です"); setLoading(false); return; }
 
+    // Use secure RPC that validates the invitation token atomically
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any).from("group_members").insert({ group_id: groupId, user_id: user.id, role: "member" });
+    const { error } = await (supabase as any).rpc("join_group_via_invitation", { invitation_token: token });
     if (error) { setError(error.message); setLoading(false); return; }
 
     router.push(`/groups/${groupId}`);

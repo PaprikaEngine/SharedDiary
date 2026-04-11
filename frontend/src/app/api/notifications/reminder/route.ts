@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
 import { createClient } from "@/lib/supabase/server";
-import { sendBatonEmail } from "@/lib/resend";
+import { escapeHtml } from "@/lib/resend";
 
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(
@@ -16,7 +16,10 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
   const apiKey = process.env.CRON_API_KEY;
-  if (apiKey && authHeader !== `Bearer ${apiKey}`) {
+  if (!apiKey) {
+    return NextResponse.json({ error: "CRON_API_KEY not configured" }, { status: 503 });
+  }
+  if (authHeader !== `Bearer ${apiKey}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -54,7 +57,8 @@ export async function POST(request: NextRequest) {
 
       const holderData = holder as { name: string; email: string };
       const prefsData = prefs as { email_enabled: boolean; push_enabled: boolean; push_subscription: unknown } | null;
-      const groupUrl = `${baseUrl}/groups/${g.id}`;
+      const safeGroupName = escapeHtml(g.name);
+      const safeGroupUrl = encodeURI(`${baseUrl}/groups/${g.id}`);
 
       // Send reminder email
       if ((prefsData?.email_enabled ?? true) && process.env.RESEND_API_KEY) {
@@ -65,15 +69,15 @@ export async function POST(request: NextRequest) {
           await resend.emails.send({
             from,
             to: holderData.email,
-            subject: `${g.name} — 楽しみに待ってるよ!`,
+            subject: `${safeGroupName} — 楽しみに待ってるよ!`,
             html: `
               <div style="font-family: 'Noto Serif JP', Georgia, serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; background: #FDF8F0; border-radius: 12px;">
                 <h2 style="color: #2D2D2D; font-size: 18px; margin: 0 0 16px;">そろそろ書く番だよ!</h2>
                 <p style="color: #5A5A5A; font-size: 15px; line-height: 1.7; margin: 0 0 24px;">
-                  「<strong>${g.name}</strong>」のバトンを持ったまま${g.baton_deadline_days}日が経ちました。<br/>
+                  「<strong>${safeGroupName}</strong>」のバトンを持ったまま${g.baton_deadline_days}日が経ちました。<br/>
                   みんな楽しみに待ってるよ!
                 </p>
-                <a href="${groupUrl}" style="display: inline-block; background: #5B7A5E; color: white; text-decoration: none; padding: 10px 24px; border-radius: 20px; font-size: 14px; font-weight: 600;">
+                <a href="${safeGroupUrl}" style="display: inline-block; background: #5B7A5E; color: white; text-decoration: none; padding: 10px 24px; border-radius: 20px; font-size: 14px; font-weight: 600;">
                   日記を書く
                 </a>
               </div>
@@ -93,7 +97,7 @@ export async function POST(request: NextRequest) {
             JSON.stringify({
               title: g.name,
               body: "楽しみに待ってるよ! そろそろ日記を書こう",
-              url: groupUrl,
+              url: safeGroupUrl,
             }),
           );
           sent++;
