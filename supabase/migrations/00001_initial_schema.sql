@@ -127,10 +127,10 @@ create policy "Owners can add members"
   on public.group_members for insert
   with check (
     exists (
-      select 1 from public.group_members
-      where group_members.group_id = group_members.group_id
-        and group_members.user_id = auth.uid()
-        and group_members.role = 'owner'
+      select 1 from public.group_members as gm
+      where gm.group_id = group_members.group_id
+        and gm.user_id = auth.uid()
+        and gm.role = 'owner'
     )
     or user_id = auth.uid() -- Allow self-join via invitation
   );

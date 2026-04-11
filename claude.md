@@ -101,11 +101,11 @@ Push通知    : Web Push (無料)
 
 ```
 users             id, name, avatar_url, email
-groups            id, name, cover_image, created_by, baton_deadline_days
+groups            id, name, cover_image, created_by, baton_deadline_days,
+                  current_baton_holder_id (次に書く人)
 group_members     group_id, user_id, role(owner|member), joined_at
 
 entries           id, group_id, author_id, body(nullable), created_at
-                  current_baton_holder_id (次に書く人)
 
 # メディア添付（1エントリに複数）
 entry_media       id, entry_id, type(image|video|animation), url, order, width, height
