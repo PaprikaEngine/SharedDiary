@@ -13,11 +13,13 @@ import {
 
 export type FlipbookCanvasHandle = {
   flattenToDataUrl: () => string;
-  loadDataUrl: (dataUrl: string | null) => void;
   clear: () => void;
 };
 
 type Props = {
+  /** Unique id of the currently-displayed frame — when this changes the
+   *  child resets its stroke history so strokes don't leak between frames. */
+  frameId: string;
   /** Current frame's committed image (drawn strokes flattened to data URL) */
   frameDataUrl: string | null;
   /** Previous frame data URLs for onion skin */
@@ -29,7 +31,7 @@ type Props = {
 };
 
 export const FlipbookCanvas = forwardRef<FlipbookCanvasHandle, Props>(
-  function FlipbookCanvas({ frameDataUrl, onionSkinFrames, onionSkinEnabled, disabled, scale }, ref) {
+  function FlipbookCanvas({ frameId, frameDataUrl, onionSkinFrames, onionSkinEnabled, disabled, scale }, ref) {
     const bgCanvasRef = useRef<HTMLCanvasElement>(null);
     const drawCanvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -77,6 +79,16 @@ export const FlipbookCanvas = forwardRef<FlipbookCanvasHandle, Props>(
     }, [frameDataUrl, onionSkinFrames, onionSkinEnabled]);
 
     useEffect(() => { renderBackground(); }, [renderBackground]);
+
+    // Reset stroke history whenever the frame changes. Without this the
+    // previous frame's strokes would keep compositing onto the new frame
+    // (and would still be visible during playback), making frames look
+    // cumulative instead of independent.
+    useEffect(() => {
+      dispatch({ type: "clear" });
+      const ctx = drawCanvasRef.current?.getContext("2d");
+      if (ctx) ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+    }, [frameId]);
 
     // Redraw all strokes
     const redraw = useCallback(() => {
@@ -141,11 +153,6 @@ export const FlipbookCanvas = forwardRef<FlipbookCanvasHandle, Props>(
         // Draw current strokes
         if (drawCanvasRef.current) ctx.drawImage(drawCanvasRef.current, 0, 0);
         return c.toDataURL("image/png");
-      },
-      loadDataUrl(dataUrl: string | null) {
-        dispatch({ type: "clear" });
-        // The committed image is set via frameDataUrl prop
-        // We just need to reset the stroke history
       },
       clear() {
         dispatch({ type: "clear" });

@@ -136,28 +136,21 @@ export function FlipbookEditor({ initial, onSave, onClose }: Props) {
 
   // --- Save ---
   const handleSave = useCallback(() => {
-    commitCurrentFrame();
-    // Need a tick for state to update
-    setTimeout(() => {
-      setFrames((currentFrames) => {
-        // Also grab latest from canvas for current frame
-        const latestDataUrl = canvasRef.current?.flattenToDataUrl() ?? null;
-        const finalFrames = currentFrames.map((f, i) =>
-          i === currentIndex ? { ...f, dataUrl: latestDataUrl } : f
-        );
-
-        onSave({
-          fps,
-          loop,
-          frames: finalFrames.map((f, i) => ({
-            order: i,
-            canvasJson: f.dataUrl || "",
-          })).filter((f) => f.canvasJson),
-        });
-        return finalFrames;
-      });
-    }, 0);
-  }, [commitCurrentFrame, currentIndex, fps, loop, onSave]);
+    // Flatten the current frame once — frameImageRef inside the canvas
+    // holds any previously-committed image for this frame, and drawCanvas
+    // holds whatever the user has drawn since. One flatten captures both.
+    const latestDataUrl = canvasRef.current?.flattenToDataUrl() ?? null;
+    const finalFrames = frames.map((f, i) =>
+      i === currentIndex ? { ...f, dataUrl: latestDataUrl } : f
+    );
+    onSave({
+      fps,
+      loop,
+      frames: finalFrames
+        .map((f, i) => ({ order: i, canvasJson: f.dataUrl || "" }))
+        .filter((f) => f.canvasJson),
+    });
+  }, [frames, currentIndex, fps, loop, onSave]);
 
   const currentFrame = frames[currentIndex];
 
@@ -223,6 +216,7 @@ export function FlipbookEditor({ initial, onSave, onClose }: Props) {
         <div className="flex-1 flex items-center justify-center p-4 min-h-0 overflow-auto">
           <FlipbookCanvas
             ref={canvasRef}
+            frameId={currentFrame.id}
             frameDataUrl={currentFrame.dataUrl}
             onionSkinFrames={onionSkinFrames}
             onionSkinEnabled={onionSkin}
