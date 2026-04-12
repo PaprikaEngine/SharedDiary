@@ -233,7 +233,7 @@ export type DiaryCanvasHandle = {
 // --- Component ---
 
 export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
-  function DiaryCanvas({ width = 800, height = 600, onScaleChange, stampOverlay, onStampClick, stampCount }, ref) {
+  function DiaryCanvas({ width = 800, height = 1131, onScaleChange, stampOverlay, onStampClick, stampCount }, ref) {
     const drawCanvasRef = useRef<HTMLCanvasElement>(null);
     const bgCanvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);

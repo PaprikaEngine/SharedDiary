@@ -14,11 +14,19 @@ import { createClient } from "@/lib/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
+// Legacy entries (pre-A4) default to 800×600. New entries store their
+// actual canvas dimensions so the viewer can render them at the exact
+// aspect the author drew on.
+const LEGACY_CANVAS_WIDTH = 800;
+const LEGACY_CANVAS_HEIGHT = 600;
+
 type EntryData = {
   id: string;
   body: string | null;
   created_at: string;
   canvas_background: "ruled" | "plain" | "grid" | null;
+  canvas_width: number | null;
+  canvas_height: number | null;
   author: { id: string; name: string; avatar_url: string | null } | null;
   media: {
     id: string; type: string; url: string; order: number;
@@ -95,19 +103,25 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
     entry.flipbook.base_height != null;
   const hasCanvasBox = !!canvasMedia || placedMedia.length > 0 || flipbookPlaced;
 
+  // Per-entry canvas dimensions — new entries store their actual A4
+  // values; legacy entries fall back to the original 800×600.
+  const entryCanvasWidth = entry?.canvas_width ?? LEGACY_CANVAS_WIDTH;
+  const entryCanvasHeight = entry?.canvas_height ?? LEGACY_CANVAS_HEIGHT;
+  const canvasAspectRatio = `${entryCanvasWidth} / ${entryCanvasHeight}`;
+
   // Track the canvas container's rendered width so MediaOverlayDisplay can
   // scale its canvas-space (800×600) coordinates down to the current size.
   const canvasBoxRef = useRef<HTMLDivElement>(null);
-  const [canvasDisplayWidth, setCanvasDisplayWidth] = useState(800);
+  const [canvasDisplayWidth, setCanvasDisplayWidth] = useState(entryCanvasWidth);
   useEffect(() => {
     const el = canvasBoxRef.current;
     if (!el) return;
-    const update = () => setCanvasDisplayWidth(el.clientWidth || 800);
+    const update = () => setCanvasDisplayWidth(el.clientWidth || entryCanvasWidth);
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [hasCanvasBox]);
+  }, [hasCanvasBox, entryCanvasWidth]);
 
   const flip = useCallback((dir: "prev" | "next") => {
     const newIndex = dir === "prev" ? index + 1 : index - 1;
@@ -251,10 +265,13 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
           <div className="mb-6">
             <div
               ref={canvasBoxRef}
-              className="relative aspect-[4/3] w-full max-w-[800px] mx-auto rounded-lg overflow-hidden border border-cream-dark/40"
+              className="relative w-full max-w-[800px] mx-auto rounded-lg overflow-hidden border border-cream-dark/40"
+              style={{ aspectRatio: canvasAspectRatio }}
             >
               <CanvasBackground
                 type={entry.canvas_background ?? "ruled"}
+                width={entryCanvasWidth}
+                height={entryCanvasHeight}
                 className="absolute inset-0 w-full h-full"
               />
               {canvasMedia && (
@@ -264,7 +281,7 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
                 <div className="absolute inset-0">
                   <MediaOverlayDisplay
                     media={placedMedia}
-                    canvasWidth={800}
+                    canvasWidth={entryCanvasWidth}
                     displayWidth={canvasDisplayWidth}
                   />
                 </div>
@@ -281,14 +298,14 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
                     fps={entry.flipbook.fps}
                     loop={entry.flipbook.loop}
                     frames={entry.flipbook.frames}
-                    canvasWidth={800}
+                    canvasWidth={entryCanvasWidth}
                     displayWidth={canvasDisplayWidth}
                   />
                 </div>
               )}
               {entry.stamps.length > 0 && (
                 <div className="absolute inset-0 pointer-events-none">
-                  <EntryStampsDisplay stamps={entry.stamps} canvasWidth={800} canvasHeight={600} />
+                  <EntryStampsDisplay stamps={entry.stamps} canvasWidth={entryCanvasWidth} canvasHeight={entryCanvasHeight} />
                 </div>
               )}
             </div>
@@ -317,7 +334,7 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
         {/* Stamps — only when there's no canvas box (canvas renders stamps as an overlay above) */}
         {entry.stamps.length > 0 && !hasCanvasBox && (
           <div className="pl-5 sm:pl-8">
-            <EntryStampsDisplay stamps={entry.stamps} canvasWidth={800} canvasHeight={600} />
+            <EntryStampsDisplay stamps={entry.stamps} canvasWidth={entryCanvasWidth} canvasHeight={entryCanvasHeight} />
           </div>
         )}
 

@@ -15,6 +15,7 @@ export default async function EntryPage({ params }: Props) {
 
   type EntryWithRelations = {
     id: string; group_id: string; author_id: string; body: string | null; created_at: string;
+    canvas_width: number | null; canvas_height: number | null;
     author: { id: string; name: string; avatar_url: string | null } | null;
     media: { id: string; type: string; url: string; order: number; width: number | null; height: number | null }[] | null;
   };
@@ -25,6 +26,7 @@ export default async function EntryPage({ params }: Props) {
     id: entryId, group_id: groupId, author_id: "demo",
     body: "今日はいい天気だったね！公園でアイスを食べたよ\n\nまた明日も遊ぼうね。",
     created_at: new Date().toISOString(),
+    canvas_width: null, canvas_height: null,
     author: { id: "demo", name: "ともだち", avatar_url: null }, media: null,
   };
   let prevEntry: { id: string } | null = null;
@@ -133,7 +135,7 @@ export default async function EntryPage({ params }: Props) {
           {/* Stamps */}
           {entryStamps.length > 0 && sortedMedia.length > 0 && (
             <div className="pl-6">
-              <EntryStampsDisplay stamps={entryStamps} canvasWidth={800} canvasHeight={600} />
+              <EntryStampsDisplay stamps={entryStamps} canvasWidth={entry.canvas_width ?? 800} canvasHeight={entry.canvas_height ?? 600} />
             </div>
           )}
 

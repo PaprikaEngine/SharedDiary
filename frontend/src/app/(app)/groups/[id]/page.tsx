@@ -38,6 +38,8 @@ export default async function GroupPage({ params }: Props) {
     created_at: string;
     author_id: string;
     canvas_background: "ruled" | "plain" | "grid" | null;
+    canvas_width: number | null;
+    canvas_height: number | null;
   };
   type MediaRow = {
     id: string; entry_id: string; type: string; url: string; order: number;
@@ -69,6 +71,8 @@ export default async function GroupPage({ params }: Props) {
   type EntryData = {
     id: string; body: string | null; created_at: string;
     canvas_background: "ruled" | "plain" | "grid" | null;
+    canvas_width: number | null;
+    canvas_height: number | null;
     author: { id: string; name: string; avatar_url: string | null } | null;
     media: {
       id: string; type: string; url: string; order: number;
@@ -89,11 +93,13 @@ export default async function GroupPage({ params }: Props) {
     {
       id: "demo-1", body: "今日はいい天気だったね！公園でアイスを食べたよ\n\nまた明日も遊ぼうね。",
       created_at: new Date().toISOString(), canvas_background: null,
+      canvas_width: null, canvas_height: null,
       author: { id: "2", name: "ともだち", avatar_url: null }, media: null, stamps: [], reactions: [], flipbook: null,
     },
     {
       id: "demo-2", body: "昨日は映画を見に行ったよ。すごくおもしろかった！また一緒に行こう",
       created_at: "2026-04-11T00:00:00.000Z", canvas_background: null,
+      canvas_width: null, canvas_height: null,
       author: { id: "1", name: "あなた", avatar_url: null }, media: null, stamps: [], reactions: [], flipbook: null,
     },
   ];
@@ -124,7 +130,7 @@ export default async function GroupPage({ params }: Props) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: entriesData, error: entriesError } = await (supabase as any)
         .from("entries")
-        .select("id, body, created_at, author_id, canvas_background")
+        .select("id, body, created_at, author_id, canvas_background, canvas_width, canvas_height")
         .eq("group_id", id)
         .order("created_at", { ascending: false });
       if (entriesError) console.error("[GroupPage] entries fetch failed:", entriesError);
@@ -171,6 +177,8 @@ export default async function GroupPage({ params }: Props) {
           body: e.body,
           created_at: e.created_at,
           canvas_background: e.canvas_background,
+          canvas_width: e.canvas_width,
+          canvas_height: e.canvas_height,
           author: authorsMap.get(e.author_id) ?? null,
           media: allMedia.filter((m) => m.entry_id === e.id),
           stamps: allStamps.filter((s) => s.entry_id === e.id),

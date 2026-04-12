@@ -7,7 +7,7 @@ import imageCompression from "browser-image-compression";
 import { createClient } from "@/lib/supabase/client";
 import { validateVideo } from "@/lib/video-utils";
 import { triggerBatonNotification } from "@/lib/notifications";
-import { DiaryCanvas } from "@/components/diary-canvas";
+import { DiaryCanvas, DIARY_CANVAS_WIDTH, DIARY_CANVAS_HEIGHT } from "@/components/diary-canvas";
 import type { DiaryCanvasHandle } from "@/components/diary-canvas";
 import { StampPicker, StampOverlayEditor, MAX_STAMPS } from "@/components/stamps";
 import type { PlacedStamp } from "@/components/stamps";
@@ -16,7 +16,11 @@ import { FlipbookEditor, type FlipbookData, DraggableFlipbook, type PlacedFlipbo
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ImagePlus, Film, BookOpen, Loader2 } from "lucide-react";
 
-// Base display width on the 800×600 canvas for newly placed media.
+// Center of the A4 canvas — new items drop here by default.
+const CANVAS_CENTER_X = DIARY_CANVAS_WIDTH / 2;
+const CANVAS_CENTER_Y = DIARY_CANVAS_HEIGHT / 2;
+
+// Base display width on the canvas for newly placed media.
 // Roughly 35% of page width — large enough to see, small enough that
 // multiple photos fit on the same page.
 const MEDIA_BASE_WIDTH = 280;
@@ -141,8 +145,8 @@ export default function NewEntryPage() {
               type: "image",
               file: compressed,
               previewUrl,
-              x: 400 + dx,
-              y: 300 + dy,
+              x: CANVAS_CENTER_X + dx,
+              y: CANVAS_CENTER_Y + dy,
               scale: 1,
               rotation: 0,
               baseWidth: MEDIA_BASE_WIDTH,
@@ -180,8 +184,8 @@ export default function NewEntryPage() {
               type: "video",
               file,
               previewUrl,
-              x: 400 + dx,
-              y: 300 + dy,
+              x: CANVAS_CENTER_X + dx,
+              y: CANVAS_CENTER_Y + dy,
               scale: 1,
               rotation: 0,
               baseWidth: MEDIA_BASE_WIDTH,
@@ -210,7 +214,7 @@ export default function NewEntryPage() {
     const canvasBackground = !canvasEmpty ? canvasRef.current?.getBackground() ?? null : null;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: entry, error: entryError } = await (supabase as any).from("entries").insert({ group_id: groupId, author_id: user.id, body: null, canvas_background: canvasBackground }).select().single();
+    const { data: entry, error: entryError } = await (supabase as any).from("entries").insert({ group_id: groupId, author_id: user.id, body: null, canvas_background: canvasBackground, canvas_width: DIARY_CANVAS_WIDTH, canvas_height: DIARY_CANVAS_HEIGHT }).select().single();
     if (entryError) { setError(entryError.message); setLoading(false); return; }
 
     if (!canvasEmpty && canvasRef.current) {
@@ -313,7 +317,7 @@ export default function NewEntryPage() {
           {/* Canvas */}
           <div className="relative">
             <DiaryCanvas
-              ref={canvasRef} width={800} height={600}
+              ref={canvasRef} width={DIARY_CANVAS_WIDTH} height={DIARY_CANVAS_HEIGHT}
               onScaleChange={setCanvasScale}
               onStampClick={() => setShowStampPicker((v) => !v)}
               stampCount={placedStamps.length}
@@ -350,7 +354,7 @@ export default function NewEntryPage() {
                     </div>
                   )}
                   {placedStamps.length > 0 && (
-                    <StampOverlayEditor stamps={placedStamps} onStampsChange={setPlacedStamps} canvasWidth={800} canvasHeight={600} canvasScale={canvasScale} />
+                    <StampOverlayEditor stamps={placedStamps} onStampsChange={setPlacedStamps} canvasWidth={DIARY_CANVAS_WIDTH} canvasHeight={DIARY_CANVAS_HEIGHT} canvasScale={canvasScale} />
                   )}
                 </>
               }
@@ -359,7 +363,7 @@ export default function NewEntryPage() {
               <div className="mt-3">
                 <StampPicker groupId={groupId} onSelect={(stamp) => {
                   if (placedStamps.length >= MAX_STAMPS) return;
-                  setPlacedStamps((p) => [...p, { instanceId: crypto.randomUUID(), stampId: stamp.id, url: stamp.url, x: 400, y: 300, scale: 1, rotation: 0 }]);
+                  setPlacedStamps((p) => [...p, { instanceId: crypto.randomUUID(), stampId: stamp.id, url: stamp.url, x: CANVAS_CENTER_X, y: CANVAS_CENTER_Y, scale: 1, rotation: 0 }]);
                 }} onClose={() => setShowStampPicker(false)} />
               </div>
             )}
@@ -426,8 +430,8 @@ export default function NewEntryPage() {
                   prev
                     ? { ...prev, previewDataUrl: firstFrame }
                     : {
-                        x: 400,
-                        y: 300,
+                        x: CANVAS_CENTER_X,
+                        y: CANVAS_CENTER_Y,
                         scale: 1,
                         rotation: 0,
                         baseWidth: FLIPBOOK_BASE_WIDTH,
