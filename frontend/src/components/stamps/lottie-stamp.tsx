@@ -58,15 +58,25 @@ export function LottieStamp({
     };
   }, [url, loop, autoplay]);
 
+  // All children are absolutely positioned inside the relative parent so
+  // that the loading/error overlays can sit ON TOP OF the Lottie container
+  // instead of stacking next to it — previously the SVG and the "!" error
+  // div rendered in normal flow and the SVG overflowed below the cell,
+  // bleeding the stamp into adjacent grid cells in the picker.
   return (
     <div
-      className={`relative inline-block ${className}`}
+      className={`relative inline-block overflow-hidden ${className}`}
       style={{ width, height }}
       onClick={onClick}
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } : undefined}
     >
+      <div
+        ref={containerRef}
+        className="absolute inset-0"
+        style={{ opacity: loaded ? 1 : 0 }}
+      />
       {!loaded && !error && thumbnailUrl && (
         <Image
           src={thumbnailUrl}
@@ -77,18 +87,11 @@ export function LottieStamp({
           unoptimized
         />
       )}
-      {error && (
-        <div
-          className="flex items-center justify-center bg-cream-dark/50 rounded"
-          style={{ width, height }}
-        >
+      {!loaded && error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-cream-dark/50 rounded">
           <span className="text-xs text-ink-light">!</span>
         </div>
       )}
-      <div
-        ref={containerRef}
-        style={{ width, height, opacity: loaded ? 1 : 0 }}
-      />
     </div>
   );
 }
