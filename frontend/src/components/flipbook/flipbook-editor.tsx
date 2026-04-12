@@ -102,30 +102,41 @@ export function FlipbookEditor({ initial, onSave, onClose }: Props) {
   }, [frames.length, currentIndex]);
 
   // --- Playback ---
+  // 1) Commit any pending strokes exactly once when playback starts.
+  //    Kept separate from the interval effect — if we put commit in the
+  //    same effect with commitCurrentFrame as a dep, the effect re-runs
+  //    on every frame advance (because commitCurrentFrame closes over
+  //    currentIndex) and each re-run flattens the now-stale canvas into
+  //    the *new* frame's slot, overwriting every frame as playback walks
+  //    through.
+  const commitRef = useRef(commitCurrentFrame);
+  useEffect(() => { commitRef.current = commitCurrentFrame; }, [commitCurrentFrame]);
   useEffect(() => {
-    if (isPlaying) {
-      commitCurrentFrame();
-      playIntervalRef.current = setInterval(() => {
-        setCurrentIndex((prev) => {
-          const next = prev + 1;
-          if (next >= frames.length) {
-            if (loop) return 0;
-            setIsPlaying(false);
-            return prev;
-          }
-          return next;
-        });
-      }, 1000 / fps);
-    } else {
-      if (playIntervalRef.current) {
-        clearInterval(playIntervalRef.current);
-        playIntervalRef.current = null;
-      }
-    }
+    if (isPlaying) commitRef.current();
+  }, [isPlaying]);
+
+  // 2) Advance the frame index on an interval. Must NOT depend on
+  //    currentIndex (directly or via commitCurrentFrame) or the interval
+  //    gets torn down and recreated on every tick.
+  useEffect(() => {
+    if (!isPlaying) return;
+    const id = setInterval(() => {
+      setCurrentIndex((prev) => {
+        const next = prev + 1;
+        if (next >= frames.length) {
+          if (loop) return 0;
+          setIsPlaying(false);
+          return prev;
+        }
+        return next;
+      });
+    }, 1000 / fps);
+    playIntervalRef.current = id;
     return () => {
-      if (playIntervalRef.current) clearInterval(playIntervalRef.current);
+      clearInterval(id);
+      playIntervalRef.current = null;
     };
-  }, [isPlaying, fps, loop, frames.length, commitCurrentFrame]);
+  }, [isPlaying, fps, loop, frames.length]);
 
   // --- Onion skin frames ---
   const onionSkinFrames: string[] = [];
