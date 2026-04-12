@@ -3,11 +3,15 @@
 import { useState, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronLeft, ChevronRight, Trash2, Loader2 } from "lucide-react";
 import { EntryStampsDisplay } from "./entries/[entryId]/entry-stamps-display";
 import { ReactionBar } from "./entries/[entryId]/reaction-bar";
 import { FlipbookPlayer } from "@/components/flipbook";
 import { CanvasBackground } from "@/components/diary-canvas";
+import { createClient } from "@/lib/supabase/client";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 type EntryData = {
   id: string;
@@ -27,12 +31,17 @@ type Props = {
   groupId: string;
   currentUserId: string | null;
   hasBaton: boolean;
+  isOwner: boolean;
   totalCount: number;
 };
 
-export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasBaton, totalCount }: Props) {
+export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasBaton, isOwner, totalCount }: Props) {
+  const router = useRouter();
   const [index, setIndex] = useState(initialIndex);
   const [direction, setDirection] = useState<"left" | "right" | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const entry = entries[index];
   const pageNumber = totalCount - index; // newest = totalCount, oldest = 1
@@ -53,6 +62,53 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
       setDirection(null);
     }, 150);
   }, [index, entries.length]);
+
+  const canDelete =
+    !!entry &&
+    (isOwner || (currentUserId != null && entry.author?.id === currentUserId));
+
+  const handleDelete = async () => {
+    if (!entry) return;
+    setDeleting(true);
+    setDeleteError(null);
+    const supabase = createClient();
+
+    // Clean up storage files under {group_id}/{entry_id}/ first. Failing to
+    // remove storage is not fatal — the DB row is the source of truth.
+    try {
+      const prefix = `${groupId}/${entry.id}`;
+      const list = async (path: string): Promise<string[]> => {
+        const { data } = await supabase.storage.from("media").list(path, { limit: 100 });
+        if (!data) return [];
+        const out: string[] = [];
+        for (const f of data) {
+          // folders have a null id in the list response
+          if (f.id === null) out.push(...(await list(`${path}/${f.name}`)));
+          else out.push(`${path}/${f.name}`);
+        }
+        return out;
+      };
+      const paths = await list(prefix);
+      if (paths.length > 0) await supabase.storage.from("media").remove(paths);
+    } catch (err) {
+      console.error("[PageViewer] storage cleanup failed:", err);
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).from("entries").delete().eq("id", entry.id);
+    if (error) {
+      setDeleteError(error.message);
+      setDeleting(false);
+      return;
+    }
+
+    setConfirmDelete(false);
+    setDeleting(false);
+    // Step back one page if we deleted the newest, else stay at the same
+    // index (which now shows the next older entry).
+    if (index >= entries.length - 1 && index > 0) setIndex(index - 1);
+    router.refresh();
+  };
 
   // Swipe handling
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
@@ -189,11 +245,49 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
           </div>
         )}
 
+        {/* Delete button — visible to the author or group owner */}
+        {canDelete && (
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            className="absolute top-4 right-4 size-8 rounded-full flex items-center justify-center text-ink-light/40 hover:text-red-500 hover:bg-red-50 transition-colors"
+            title="この日記を削除"
+          >
+            <Trash2 className="size-4" />
+          </button>
+        )}
+
         {/* Page number */}
         <div className="absolute bottom-4 right-6 text-sm text-ink-light/25 font-handwriting">
           {pageNumber} / {totalCount}
         </div>
       </article>
+
+      <Dialog open={confirmDelete} onOpenChange={(open) => { if (!deleting) setConfirmDelete(open); }}>
+        <DialogContent className="sm:max-w-md bg-cream">
+          <DialogHeader>
+            <DialogTitle className="text-base">この日記を削除しますか?</DialogTitle>
+            <DialogDescription>
+              削除すると、画像・スタンプ・パラパラアニメ・リアクションも一緒に消えます。元に戻せません。
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError && (
+            <p className="text-xs text-destructive">{deleteError}</p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(false)} disabled={deleting}>
+              キャンセル
+            </Button>
+            <Button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-red-500 hover:bg-red-600 text-white"
+            >
+              {deleting ? <Loader2 className="size-4 animate-spin" /> : "削除する"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Reactions + Navigation */}
       <div className="flex items-center justify-between mt-3 px-1">

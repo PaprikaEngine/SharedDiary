@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ArrowLeft } from "lucide-react";
 import { InviteButton } from "./invite-button";
 import { PageViewer } from "./page-viewer";
+import { GroupMenu } from "./group-menu";
 import { ExportPdfButton } from "@/components/export-pdf";
 
 type Props = {
@@ -226,6 +227,21 @@ export default async function GroupPage({ params }: Props) {
             )}
             {isOwner && <InviteButton groupId={id} />}
             <ExportPdfButton groupId={id} groupName={group.name} />
+            {currentUserId && (
+              <GroupMenu
+                groupId={id}
+                currentUserId={currentUserId}
+                isOwner={isOwner}
+                hasBaton={hasBaton}
+                currentHolderId={group.current_baton_holder_id}
+                members={
+                  (members ?? [])
+                    .map((m) => m.user)
+                    .filter((u): u is { id: string; name: string; avatar_url: string | null } => u !== null)
+                    .map((u) => ({ id: u.id, name: u.name }))
+                }
+              />
+            )}
           </div>
         </div>
       </header>
@@ -238,6 +254,7 @@ export default async function GroupPage({ params }: Props) {
           groupId={id}
           currentUserId={currentUserId}
           hasBaton={hasBaton}
+          isOwner={isOwner}
           totalCount={entries.length}
         />
       </main>
