@@ -1,17 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
+import imageCompression from "browser-image-compression";
 import { createClient } from "@/lib/supabase/client";
 
 export default function NewGroupPage() {
   const [name, setName] = useState("");
   const [batonDeadlineDays, setBatonDeadlineDays] = useState(3);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const supabase = createClient();
+
+  const handleCoverSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const compressed = await imageCompression(file, { maxSizeMB: 2, maxWidthOrHeight: 1920, useWebWorker: true });
+    setCoverFile(compressed);
+    setCoverPreview(URL.createObjectURL(compressed));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,6 +55,22 @@ export default function NewGroupPage() {
       return;
     }
 
+    if (coverFile) {
+      const coverPath = `${data.id}/cover`;
+      const { error: uploadError } = await supabase.storage
+        .from("media")
+        .upload(coverPath, coverFile, { contentType: coverFile.type, upsert: true });
+
+      if (!uploadError) {
+        const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(coverPath);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from("groups")
+          .update({ cover_image: publicUrl })
+          .eq("id", data.id);
+      }
+    }
+
     router.push(`/groups/${data.id}`);
     router.refresh();
   };
@@ -66,6 +95,33 @@ export default function NewGroupPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Cover Image */}
+            <div>
+              <label className="block text-sm font-medium text-ink mb-2">
+                表紙（任意）
+              </label>
+              <div
+                onClick={() => coverInputRef.current?.click()}
+                className="relative w-full h-40 border-2 border-dashed border-cream-dark rounded-xl flex items-center justify-center cursor-pointer hover:border-moss transition-colors overflow-hidden"
+              >
+                {coverPreview ? (
+                  <Image src={coverPreview} alt="表紙プレビュー" fill className="object-cover" />
+                ) : (
+                  <div className="text-center">
+                    <span className="text-3xl text-ink-light block mb-1">🖼</span>
+                    <span className="text-sm text-ink-light">タップして画像を選択</span>
+                  </div>
+                )}
+              </div>
+              <input
+                ref={coverInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleCoverSelect}
+                className="hidden"
+              />
+            </div>
+
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-ink mb-2">
                 日記帳の名前

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 
@@ -8,6 +9,7 @@ export default async function GroupsPage() {
   type GroupWithHolder = {
     id: string;
     name: string;
+    cover_image: string | null;
     current_holder: { name: string } | null;
   };
 
@@ -15,8 +17,8 @@ export default async function GroupsPage() {
 
   if (isDemo) {
     groups = [
-      { id: "demo-1", name: "高校の友達との日記", current_holder: { name: "ともだち" } },
-      { id: "demo-2", name: "大学サークルの交換日記", current_holder: { name: "あなた" } },
+      { id: "demo-1", name: "高校の友達との日記", cover_image: null, current_holder: { name: "ともだち" } },
+      { id: "demo-2", name: "大学サークルの交換日記", cover_image: null, current_holder: { name: "あなた" } },
     ];
   } else {
     try {
@@ -83,7 +85,16 @@ export default async function GroupsPage() {
                 href={`/groups/${group.id}`}
                 className="block bg-white border border-cream-dark rounded-xl p-6 hover:border-moss transition-colors"
               >
-                <div className="flex items-start justify-between">
+                <div className="flex items-start gap-4">
+                  {group.cover_image ? (
+                    <div className="relative w-16 h-16 rounded-lg overflow-hidden shrink-0">
+                      <Image src={group.cover_image} alt="" fill className="object-cover" />
+                    </div>
+                  ) : (
+                    <div className="w-16 h-16 rounded-lg bg-cream-dark flex items-center justify-center shrink-0">
+                      <span className="text-3xl">📓</span>
+                    </div>
+                  )}
                   <div>
                     <h2 className="text-xl font-medium text-ink mb-1">
                       {group.name}
@@ -92,7 +103,6 @@ export default async function GroupsPage() {
                       バトン: {group.current_holder?.name ?? "未設定"}
                     </p>
                   </div>
-                  <div className="text-3xl">📓</div>
                 </div>
               </Link>
             ))}

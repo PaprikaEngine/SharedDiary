@@ -1,8 +1,10 @@
 import Link from "next/link";
+import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { InviteButton } from "./invite-button";
 import { BatonStatus } from "./baton-status";
+import { PushNotificationToggle } from "@/components/push-notification-toggle";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -17,6 +19,9 @@ export default async function GroupPage({ params }: Props) {
   type Group = {
     id: string;
     name: string;
+    cover_image: string | null;
+    baton_deadline_days: number;
+    baton_passed_at: string | null;
     current_baton_holder_id: string | null;
     current_holder: { id: string; name: string; avatar_url: string | null } | null;
   };
@@ -31,7 +36,7 @@ export default async function GroupPage({ params }: Props) {
     author: { name: string; avatar_url: string | null } | null;
   };
 
-  let group: Group = { id, name: "高校の友達との日記", current_baton_holder_id: "1", current_holder: { id: "1", name: "あなた", avatar_url: null } };
+  let group: Group = { id, name: "高校の友達との日記", cover_image: null, baton_deadline_days: 3, baton_passed_at: new Date().toISOString(), current_baton_holder_id: "1", current_holder: { id: "1", name: "あなた", avatar_url: null } };
   let members: Member[] | null = [
     { role: "owner", user: { id: "1", name: "あなた", avatar_url: null } },
     { role: "member", user: { id: "2", name: "ともだち", avatar_url: null } },
@@ -64,6 +69,10 @@ export default async function GroupPage({ params }: Props) {
     if (!membershipData) {
       notFound();
     }
+
+    // Auto-skip baton if overdue
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).rpc("check_and_skip_baton", { p_group_id: id });
 
     // Get group details
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -125,17 +134,34 @@ export default async function GroupPage({ params }: Props) {
           </div>
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-moss">{group.name}</h1>
-            {isOwner && <InviteButton groupId={id} />}
+            <div className="flex items-center gap-2">
+              <PushNotificationToggle />
+              {isOwner && <InviteButton groupId={id} />}
+            </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-8">
+        {/* Cover Image */}
+        {group.cover_image && (
+          <div className="relative w-full h-48 rounded-xl overflow-hidden mb-8">
+            <Image
+              src={group.cover_image}
+              alt={`${group.name}の表紙`}
+              fill
+              className="object-cover"
+            />
+          </div>
+        )}
+
         {/* Baton Status */}
         <BatonStatus
           currentHolder={group.current_holder}
           hasBaton={hasBaton}
           groupId={id}
+          batonPassedAt={group.baton_passed_at}
+          deadlineDays={group.baton_deadline_days}
         />
 
         {/* Members */}

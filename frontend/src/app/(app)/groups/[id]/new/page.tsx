@@ -207,10 +207,26 @@ export default function NewEntryPage() {
 
     // Update baton holder
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any)
+    const { data: groupData } = await (supabase as any)
       .from("groups")
-      .update({ current_baton_holder_id: nextBatonHolder })
-      .eq("id", groupId);
+      .update({
+        current_baton_holder_id: nextBatonHolder,
+        baton_passed_at: new Date().toISOString(),
+      })
+      .eq("id", groupId)
+      .select("name")
+      .single();
+
+    // Send push notification to next baton holder (fire-and-forget)
+    fetch("/api/notifications/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        targetUserId: nextBatonHolder,
+        groupId,
+        groupName: groupData?.name ?? "",
+      }),
+    }).catch(() => {});
 
     router.push(`/groups/${groupId}`);
     router.refresh();

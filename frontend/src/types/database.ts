@@ -43,6 +43,7 @@ export interface Database {
           created_by: string;
           baton_deadline_days: number;
           current_baton_holder_id: string | null;
+          baton_passed_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -52,6 +53,7 @@ export interface Database {
           created_by: string;
           baton_deadline_days?: number;
           current_baton_holder_id?: string | null;
+          baton_passed_at?: string | null;
           created_at?: string;
         };
         Update: {
@@ -61,6 +63,7 @@ export interface Database {
           created_by?: string;
           baton_deadline_days?: number;
           current_baton_holder_id?: string | null;
+          baton_passed_at?: string | null;
           created_at?: string;
         };
       };
@@ -160,6 +163,26 @@ export interface Database {
           order?: number;
           width?: number | null;
           height?: number | null;
+        };
+      };
+      notification_preferences: {
+        Row: {
+          user_id: string;
+          push_enabled: boolean;
+          push_subscription: Record<string, unknown> | null;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          push_enabled?: boolean;
+          push_subscription?: Record<string, unknown> | null;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          push_enabled?: boolean;
+          push_subscription?: Record<string, unknown> | null;
+          updated_at?: string;
         };
       };
     };
