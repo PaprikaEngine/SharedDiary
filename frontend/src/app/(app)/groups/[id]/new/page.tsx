@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import imageCompression from "browser-image-compression";
 import { createClient } from "@/lib/supabase/client";
 import { validateVideo } from "@/lib/video-utils";
@@ -12,17 +11,57 @@ import { DiaryCanvas } from "@/components/diary-canvas";
 import type { DiaryCanvasHandle } from "@/components/diary-canvas";
 import { StampPicker, StampOverlayEditor, MAX_STAMPS } from "@/components/stamps";
 import type { PlacedStamp } from "@/components/stamps";
+import { MediaOverlayEditor, type PlacedMedia } from "@/components/placed-media";
 import { FlipbookEditor, type FlipbookData } from "@/components/flipbook";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ImagePlus, Film, BookOpen, Pencil, Loader2, X } from "lucide-react";
+import { ArrowLeft, ImagePlus, Film, BookOpen, Loader2, X, Pencil } from "lucide-react";
 
-type ImagePreview = { id: string; file: File; preview: string };
-type VideoPreview = { id: string; file: File; preview: string; duration: number };
+// Base display width on the 800×600 canvas for newly placed media.
+// Roughly 35% of page width — large enough to see, small enough that
+// multiple photos fit on the same page.
+const MEDIA_BASE_WIDTH = 280;
+const MAX_IMAGES = 10;
+const MAX_VIDEOS = 3;
+
+// Read natural dimensions from a compressed image/video File so we can
+// preserve its aspect ratio when placed on the canvas.
+function measureImage(file: File | Blob): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new window.Image();
+    img.onload = () => {
+      const w = img.naturalWidth || 1;
+      const h = img.naturalHeight || 1;
+      URL.revokeObjectURL(url);
+      resolve({ width: w, height: h });
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("failed to load image")); };
+    img.src = url;
+  });
+}
+
+function measureVideo(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const vid = document.createElement("video");
+    vid.preload = "metadata";
+    vid.muted = true;
+    vid.playsInline = true;
+    vid.onloadedmetadata = () => {
+      const w = vid.videoWidth || 1;
+      const h = vid.videoHeight || 1;
+      URL.revokeObjectURL(url);
+      resolve({ width: w, height: h });
+    };
+    vid.onerror = () => { URL.revokeObjectURL(url); reject(new Error("failed to load video")); };
+    vid.src = url;
+  });
+}
 
 export default function NewEntryPage() {
   const params = useParams();
   const groupId = params.id as string;
-  const [images, setImages] = useState<ImagePreview[]>([]);
+  const [placedMedia, setPlacedMedia] = useState<PlacedMedia[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [nextBatonHolder, setNextBatonHolder] = useState<string | null>(null);
@@ -30,7 +69,6 @@ export default function NewEntryPage() {
   // yourself, that would break the whole exchange-diary concept.
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
   const [membersLoaded, setMembersLoaded] = useState(false);
-  const [videos, setVideos] = useState<VideoPreview[]>([]);
   const [flipbookData, setFlipbookData] = useState<FlipbookData | null>(null);
   const [showFlipbookEditor, setShowFlipbookEditor] = useState(false);
   const [placedStamps, setPlacedStamps] = useState<PlacedStamp[]>([]);
@@ -61,47 +99,99 @@ export default function NewEntryPage() {
     return () => { mounted = false; };
   }, [groupId, supabase]);
 
+  // Stagger successive placements so pieces don't stack exactly on top
+  // of each other — offsets wrap around a small diagonal.
+  const placementOffset = (index: number) => {
+    const k = index % 6;
+    return { dx: k * 30 - 60, dy: k * 20 - 40 };
+  };
+
+  const countByType = (type: "image" | "video") =>
+    placedMedia.filter((m) => m.type === type).length;
+
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-    for (let i = 0; i < files.length && images.length < 10; i++) {
+    for (let i = 0; i < files.length; i++) {
+      if (countByType("image") + i >= MAX_IMAGES) break;
       const file = files[i];
       if (!file.type.startsWith("image/")) continue;
       try {
         const compressed = await imageCompression(file, { maxSizeMB: 2, maxWidthOrHeight: 1920, useWebWorker: true });
-        const preview = URL.createObjectURL(compressed);
-        setImages((prev) => prev.length >= 10 ? prev : [...prev, { id: crypto.randomUUID(), file: compressed, preview }]);
-      } catch (err) { console.error("Image compression failed:", err); }
+        const { width, height } = await measureImage(compressed);
+        const previewUrl = URL.createObjectURL(compressed);
+        setPlacedMedia((prev) => {
+          if (prev.filter((m) => m.type === "image").length >= MAX_IMAGES) {
+            URL.revokeObjectURL(previewUrl);
+            return prev;
+          }
+          const { dx, dy } = placementOffset(prev.length);
+          const aspect = height / width;
+          return [
+            ...prev,
+            {
+              instanceId: crypto.randomUUID(),
+              type: "image",
+              file: compressed,
+              previewUrl,
+              x: 400 + dx,
+              y: 300 + dy,
+              scale: 1,
+              rotation: 0,
+              baseWidth: MEDIA_BASE_WIDTH,
+              baseHeight: MEDIA_BASE_WIDTH * aspect,
+            },
+          ];
+        });
+      } catch (err) { console.error("Image processing failed:", err); }
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const removeImage = (id: string) => {
-    setImages((prev) => { const img = prev.find((i) => i.id === id); if (img) URL.revokeObjectURL(img.preview); return prev.filter((i) => i.id !== id); });
   };
 
   const handleVideoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-    for (let i = 0; i < files.length && videos.length + i < 3; i++) {
+    for (let i = 0; i < files.length; i++) {
+      if (countByType("video") + i >= MAX_VIDEOS) break;
       const file = files[i];
       const result = await validateVideo(file);
       if (!result.valid) { setError(result.error); continue; }
-      const preview = URL.createObjectURL(file);
-      setVideos((prev) => prev.length >= 3 ? prev : [...prev, { id: crypto.randomUUID(), file, preview, duration: result.duration }]);
+      try {
+        const { width, height } = await measureVideo(file);
+        const previewUrl = URL.createObjectURL(file);
+        setPlacedMedia((prev) => {
+          if (prev.filter((m) => m.type === "video").length >= MAX_VIDEOS) {
+            URL.revokeObjectURL(previewUrl);
+            return prev;
+          }
+          const { dx, dy } = placementOffset(prev.length);
+          const aspect = height / width;
+          return [
+            ...prev,
+            {
+              instanceId: crypto.randomUUID(),
+              type: "video",
+              file,
+              previewUrl,
+              x: 400 + dx,
+              y: 300 + dy,
+              scale: 1,
+              rotation: 0,
+              baseWidth: MEDIA_BASE_WIDTH,
+              baseHeight: MEDIA_BASE_WIDTH * aspect,
+            },
+          ];
+        });
+      } catch (err) { console.error("Video processing failed:", err); }
     }
     if (videoInputRef.current) videoInputRef.current.value = "";
-  };
-
-  const removeVideo = (id: string) => {
-    setVideos((prev) => { const v = prev.find((i) => i.id === id); if (v) URL.revokeObjectURL(v.preview); return prev.filter((i) => i.id !== id); });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     const canvasEmpty = canvasRef.current?.isEmpty() ?? true;
-    if (canvasEmpty && images.length === 0 && videos.length === 0 && placedStamps.length === 0 && !flipbookData) { setError("日記を書くか画像・動画・スタンプ・パラパラアニメを追加してください"); return; }
+    if (canvasEmpty && placedMedia.length === 0 && placedStamps.length === 0 && !flipbookData) { setError("日記を書くか画像・動画・スタンプ・パラパラアニメを追加してください"); return; }
     if (!nextBatonHolder) { setError("バトンを渡すメンバーがいません。先にグループに招待してください"); return; }
     setLoading(true);
 
@@ -129,25 +219,36 @@ export default function NewEntryPage() {
       }
     }
 
-    for (let i = 0; i < images.length; i++) {
-      const img = images[i];
-      const path = `${groupId}/${entry.id}/${img.id}`;
-      const { error: upErr } = await supabase.storage.from("media").upload(path, img.file);
+    // Upload each placed image/video, then record its canvas position
+    // so the viewer can render the overlay at the exact spot the author
+    // dropped it.
+    const mediaOrderStart = canvasEmpty ? 0 : 1;
+    for (let i = 0; i < placedMedia.length; i++) {
+      const m = placedMedia[i];
+      if (!m.file) continue;
+      const isVideo = m.type === "video";
+      const path = isVideo
+        ? `${groupId}/${entry.id}/video/${m.instanceId}`
+        : `${groupId}/${entry.id}/${m.instanceId}`;
+      const { error: upErr } = await supabase.storage
+        .from("media")
+        .upload(path, m.file, isVideo ? { contentType: m.file.type } : undefined);
       if (upErr) { console.error(upErr); continue; }
       const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(path);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from("entry_media").insert({ entry_id: entry.id, type: "image", url: publicUrl, order: (canvasEmpty ? 0 : 1) + i });
-    }
-
-    const videoOrderStart = (canvasEmpty ? 0 : 1) + images.length;
-    for (let i = 0; i < videos.length; i++) {
-      const vid = videos[i];
-      const path = `${groupId}/${entry.id}/video/${vid.id}`;
-      const { error: upErr } = await supabase.storage.from("media").upload(path, vid.file, { contentType: vid.file.type });
-      if (upErr) { console.error(upErr); continue; }
-      const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(path);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from("entry_media").insert({ entry_id: entry.id, type: "video", url: publicUrl, order: videoOrderStart + i });
+      await (supabase as any).from("entry_media").insert({
+        entry_id: entry.id,
+        type: m.type,
+        url: publicUrl,
+        order: mediaOrderStart + i,
+        x: m.x,
+        y: m.y,
+        scale: m.scale,
+        rotation: m.rotation,
+        base_width: m.baseWidth,
+        width: Math.round(m.baseWidth),
+        height: Math.round(m.baseHeight),
+      });
     }
 
     if (placedStamps.length > 0) {
@@ -199,9 +300,20 @@ export default function NewEntryPage() {
               onScaleChange={setCanvasScale}
               onStampClick={() => setShowStampPicker((v) => !v)}
               stampCount={placedStamps.length}
-              stampOverlay={placedStamps.length > 0 ? (
-                <StampOverlayEditor stamps={placedStamps} onStampsChange={setPlacedStamps} canvasWidth={800} canvasHeight={600} canvasScale={canvasScale} />
-              ) : null}
+              stampOverlay={
+                <>
+                  {placedMedia.length > 0 && (
+                    <MediaOverlayEditor
+                      media={placedMedia}
+                      onMediaChange={setPlacedMedia}
+                      canvasScale={canvasScale}
+                    />
+                  )}
+                  {placedStamps.length > 0 && (
+                    <StampOverlayEditor stamps={placedStamps} onStampsChange={setPlacedStamps} canvasWidth={800} canvasHeight={600} canvasScale={canvasScale} />
+                  )}
+                </>
+              }
             />
             {showStampPicker && (
               <div className="mt-3">
@@ -213,54 +325,38 @@ export default function NewEntryPage() {
             )}
           </div>
 
-          {/* Photos */}
+          {/* Media — images/videos are placed directly on the canvas */}
           <div className="paper-plain rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-medium text-ink-light">写真を添付</span>
-              <span className="text-xs text-ink-light/50">{images.length}/10</span>
+              <span className="text-xs font-medium text-ink-light">写真・動画をノートに貼る</span>
+              <span className="text-xs text-ink-light/50">
+                画像 {countByType("image")}/{MAX_IMAGES}・動画 {countByType("video")}/{MAX_VIDEOS}
+              </span>
             </div>
-            <div className="grid grid-cols-5 gap-2">
-              {images.map((img) => (
-                <div key={img.id} className="relative aspect-square group rounded-lg overflow-hidden">
-                  <Image src={img.preview} alt="" fill className="object-cover" />
-                  <button type="button" onClick={() => removeImage(img.id)} className="absolute top-1 right-1 size-5 bg-ink/70 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <X className="size-3" />
-                  </button>
-                </div>
-              ))}
-              {images.length < 10 && (
-                <button type="button" onClick={() => fileInputRef.current?.click()} className="aspect-square border border-dashed border-cream-dark rounded-lg flex items-center justify-center hover:border-moss/40 transition-colors">
-                  <ImagePlus className="size-4 text-ink-light/40" />
-                </button>
-              )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={countByType("image") >= MAX_IMAGES}
+                className="flex-1 flex items-center justify-center gap-2 py-3 border border-dashed border-cream-dark rounded-lg text-xs text-ink-light hover:border-moss/40 hover:text-moss transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <ImagePlus className="size-4" />
+                写真を追加
+              </button>
+              <button
+                type="button"
+                onClick={() => videoInputRef.current?.click()}
+                disabled={countByType("video") >= MAX_VIDEOS}
+                className="flex-1 flex items-center justify-center gap-2 py-3 border border-dashed border-cream-dark rounded-lg text-xs text-ink-light hover:border-moss/40 hover:text-moss transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Film className="size-4" />
+                動画を追加
+              </button>
             </div>
+            <p className="mt-2 text-[10px] text-ink-light/50">
+              ノートに貼った後、ドラッグで移動・選択中のボタンで拡大縮小や回転ができます
+            </p>
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} className="hidden" />
-          </div>
-
-          {/* Videos */}
-          <div className="paper-plain rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-medium text-ink-light">動画を添付</span>
-              <span className="text-xs text-ink-light/50">{videos.length}/3</span>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {videos.map((vid) => (
-                <div key={vid.id} className="relative aspect-video group rounded-lg overflow-hidden bg-ink/5">
-                  <video src={vid.preview} className="w-full h-full object-cover" preload="metadata" muted />
-                  <div className="absolute bottom-1 left-1 bg-ink/60 text-white text-[10px] px-1.5 py-0.5 rounded">
-                    {Math.floor(vid.duration / 60)}:{String(Math.floor(vid.duration % 60)).padStart(2, "0")}
-                  </div>
-                  <button type="button" onClick={() => removeVideo(vid.id)} className="absolute top-1 right-1 size-5 bg-ink/70 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <X className="size-3" />
-                  </button>
-                </div>
-              ))}
-              {videos.length < 3 && (
-                <button type="button" onClick={() => videoInputRef.current?.click()} className="aspect-video border border-dashed border-cream-dark rounded-lg flex items-center justify-center hover:border-moss/40 transition-colors">
-                  <Film className="size-4 text-ink-light/40" />
-                </button>
-              )}
-            </div>
             <input ref={videoInputRef} type="file" accept="video/mp4,video/webm" multiple onChange={handleVideoSelect} className="hidden" />
           </div>
 

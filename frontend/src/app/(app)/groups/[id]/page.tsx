@@ -39,7 +39,12 @@ export default async function GroupPage({ params }: Props) {
     author_id: string;
     canvas_background: "ruled" | "plain" | "grid" | null;
   };
-  type MediaRow = { id: string; entry_id: string; type: string; url: string; order: number; width: number | null; height: number | null };
+  type MediaRow = {
+    id: string; entry_id: string; type: string; url: string; order: number;
+    width: number | null; height: number | null;
+    x: number | null; y: number | null; scale: number | null;
+    rotation: number | null; base_width: number | null;
+  };
   type UserRow = { id: string; name: string; avatar_url: string | null };
   type StampRow = { id: string; x: number; y: number; scale: number; rotation: number; stamp: { url: string; thumbnail_url: string | null } };
   type ReactionRow = { stamp_id: string; user_id: string; stamp: { id: string; name: string; url: string; thumbnail_url: string | null } };
@@ -60,7 +65,12 @@ export default async function GroupPage({ params }: Props) {
     id: string; body: string | null; created_at: string;
     canvas_background: "ruled" | "plain" | "grid" | null;
     author: { id: string; name: string; avatar_url: string | null } | null;
-    media: { id: string; type: string; url: string; order: number; width: number | null; height: number | null }[] | null;
+    media: {
+      id: string; type: string; url: string; order: number;
+      width: number | null; height: number | null;
+      x: number | null; y: number | null; scale: number | null;
+      rotation: number | null; base_width: number | null;
+    }[] | null;
     stamps: StampRow[]; reactions: ReactionRow[];
     flipbook: { fps: number; loop: boolean; frames: { order: number; canvasJson: string }[] } | null;
   };
@@ -128,7 +138,7 @@ export default async function GroupPage({ params }: Props) {
 
       if (entryIds.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: md } = await (supabase as any).from("entry_media").select("id, entry_id, type, url, order, width, height").in("entry_id", entryIds);
+        const { data: md } = await (supabase as any).from("entry_media").select("id, entry_id, type, url, order, width, height, x, y, scale, rotation, base_width").in("entry_id", entryIds);
         if (md) allMedia = md as MediaRow[];
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
