@@ -10,6 +10,10 @@ type Props = {
   params: Promise<{ id: string }>;
 };
 
+// This page must be re-rendered on every request so newly posted entries
+// appear immediately after `router.refresh()` from /groups/[id]/new.
+export const dynamic = "force-dynamic";
+
 const isDemo = process.env.NEXT_PUBLIC_SUPABASE_URL === "https://demo.supabase.co";
 
 export default async function GroupPage({ params }: Props) {
@@ -31,9 +35,11 @@ export default async function GroupPage({ params }: Props) {
     id: string;
     body: string | null;
     created_at: string;
-    author: { id: string; name: string; avatar_url: string | null } | null;
-    media: { id: string; type: string; url: string; order: number; width: number | null; height: number | null }[] | null;
+    author_id: string;
+    canvas_background: "ruled" | "plain" | "grid" | null;
   };
+  type MediaRow = { id: string; entry_id: string; type: string; url: string; order: number; width: number | null; height: number | null };
+  type UserRow = { id: string; name: string; avatar_url: string | null };
   type StampRow = { id: string; x: number; y: number; scale: number; rotation: number; stamp: { url: string; thumbnail_url: string | null } };
   type ReactionRow = { stamp_id: string; user_id: string; stamp: { id: string; name: string; url: string; thumbnail_url: string | null } };
 
@@ -51,6 +57,7 @@ export default async function GroupPage({ params }: Props) {
   // Entries with full data for page viewer
   type EntryData = {
     id: string; body: string | null; created_at: string;
+    canvas_background: "ruled" | "plain" | "grid" | null;
     author: { id: string; name: string; avatar_url: string | null } | null;
     media: { id: string; type: string; url: string; order: number; width: number | null; height: number | null }[] | null;
     stamps: StampRow[]; reactions: ReactionRow[];
@@ -60,12 +67,12 @@ export default async function GroupPage({ params }: Props) {
   let entries: EntryData[] = [
     {
       id: "demo-1", body: "今日はいい天気だったね！公園でアイスを食べたよ\n\nまた明日も遊ぼうね。",
-      created_at: new Date().toISOString(),
+      created_at: new Date().toISOString(), canvas_background: null,
       author: { id: "2", name: "ともだち", avatar_url: null }, media: null, stamps: [], reactions: [], flipbook: null,
     },
     {
       id: "demo-2", body: "昨日は映画を見に行ったよ。すごくおもしろかった！また一緒に行こう",
-      created_at: "2026-04-11T00:00:00.000Z",
+      created_at: "2026-04-11T00:00:00.000Z", canvas_background: null,
       author: { id: "1", name: "あなた", avatar_url: null }, media: null, stamps: [], reactions: [], flipbook: null,
     },
   ];
@@ -90,19 +97,39 @@ export default async function GroupPage({ params }: Props) {
       const { data: membersData } = await (supabase as any).from("group_members").select(`role, user:users(id, name, avatar_url)`).eq("group_id", id);
       members = membersData as Member[] | null;
 
-      // Fetch all entries (newest first) with media
+      // Fetch entries (newest first). Avoid PostgREST embedded selects —
+      // the `order` column on entry_media / flipbook_frames collides with
+      // PostgREST's `order` directive and can silently return no rows.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: entriesData } = await (supabase as any).from("entries").select(`id, body, created_at, author:users(id, name, avatar_url), media:entry_media(id, type, url, order, width, height)`).eq("group_id", id).order("created_at", { ascending: false });
+      const { data: entriesData, error: entriesError } = await (supabase as any)
+        .from("entries")
+        .select("id, body, created_at, author_id, canvas_background")
+        .eq("group_id", id)
+        .order("created_at", { ascending: false });
+      if (entriesError) console.error("[GroupPage] entries fetch failed:", entriesError);
       const rawEntries = (entriesData ?? []) as EntryRow[];
 
-      // Fetch stamps and reactions for all entries
+      // Fetch authors in a separate query
+      const authorIds = Array.from(new Set(rawEntries.map((e) => e.author_id)));
+      const authorsMap = new Map<string, UserRow>();
+      if (authorIds.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: authorsData } = await (supabase as any).from("users").select("id, name, avatar_url").in("id", authorIds);
+        for (const u of (authorsData ?? []) as UserRow[]) authorsMap.set(u.id, u);
+      }
+
+      // Fetch media, stamps, reactions, flipbooks for all entries
       const entryIds = rawEntries.map((e) => e.id);
+      let allMedia: MediaRow[] = [];
       let allStamps: (StampRow & { entry_id: string })[] = [];
       let allReactions: (ReactionRow & { entry_id: string })[] = [];
-
       let allFlipbooks: (FlipbookRow & { entry_id: string })[] = [];
 
       if (entryIds.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: md } = await (supabase as any).from("entry_media").select("id, entry_id, type, url, order, width, height").in("entry_id", entryIds);
+        if (md) allMedia = md as MediaRow[];
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: sd } = await (supabase as any).from("entry_stamps").select(`id, entry_id, x, y, scale, rotation, stamp:stamps(url, thumbnail_url)`).in("entry_id", entryIds);
         if (sd) allStamps = sd as (StampRow & { entry_id: string })[];
@@ -119,7 +146,12 @@ export default async function GroupPage({ params }: Props) {
       entries = rawEntries.map((e) => {
         const fb = allFlipbooks.find((f) => f.entry_id === e.id);
         return {
-          ...e,
+          id: e.id,
+          body: e.body,
+          created_at: e.created_at,
+          canvas_background: e.canvas_background,
+          author: authorsMap.get(e.author_id) ?? null,
+          media: allMedia.filter((m) => m.entry_id === e.id),
           stamps: allStamps.filter((s) => s.entry_id === e.id),
           reactions: allReactions.filter((r) => r.entry_id === e.id),
           flipbook: fb ? { fps: fb.fps, loop: fb.loop, frames: fb.frames.map((fr) => ({ order: fr.order, canvasJson: fr.canvas_json })) } : null,
@@ -140,7 +172,8 @@ export default async function GroupPage({ params }: Props) {
   let isOverdue = false;
   if (passedAt && deadlineDays > 0) {
     const deadline = new Date(passedAt.getTime() + deadlineDays * 86400000);
-    daysLeft = Math.ceil((deadline.getTime() - Date.now()) / 86400000);
+    const now = new Date();
+    daysLeft = Math.ceil((deadline.getTime() - now.getTime()) / 86400000);
     isOverdue = daysLeft < 0;
   }
 

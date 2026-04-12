@@ -96,6 +96,14 @@ const NOTEBOOK_LINE_COLOR = "#C8D8E4";
 const NOTEBOOK_MARGIN_COLOR = "#E8A0A0";
 const NOTEBOOK_BG = "#FFFEF7";
 
+export type BackgroundType = "ruled" | "plain" | "grid";
+
+export const BACKGROUND_OPTIONS: { id: BackgroundType; label: string }[] = [
+  { id: "ruled", label: "罫線" },
+  { id: "plain", label: "無地" },
+  { id: "grid", label: "方眼" },
+];
+
 export const PEN_COLORS: { id: PenColor; value: string; label: string }[] = [
   { id: "black", value: "#2C2C2C", label: "黒" },
   { id: "blue", value: "#1A5276", label: "青" },
@@ -111,34 +119,65 @@ const TEXT_FONT_SIZES = [16, 20, 24];
 
 // --- Drawing helpers ---
 
-function drawNotebookBackground(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number
-) {
+function drawPaperTexture(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillStyle = NOTEBOOK_BG;
   ctx.fillRect(0, 0, w, h);
 
+  // Subtle paper grain
   ctx.fillStyle = "rgba(0,0,0,0.015)";
   for (let i = 0; i < 200; i++) {
     ctx.fillRect(Math.random() * w, Math.random() * h, 1, 1);
   }
+}
 
-  ctx.strokeStyle = NOTEBOOK_LINE_COLOR;
-  ctx.lineWidth = 0.5;
-  for (let y = NOTEBOOK_LINE_GAP; y < h; y += NOTEBOOK_LINE_GAP) {
+function drawNotebookBackground(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  type: BackgroundType = "ruled"
+) {
+  drawPaperTexture(ctx, w, h);
+
+  if (type === "plain") return;
+
+  if (type === "ruled") {
+    ctx.strokeStyle = NOTEBOOK_LINE_COLOR;
+    ctx.lineWidth = 0.5;
+    for (let y = NOTEBOOK_LINE_GAP; y < h; y += NOTEBOOK_LINE_GAP) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = NOTEBOOK_MARGIN_COLOR;
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(w, y);
+    ctx.moveTo(NOTEBOOK_MARGIN_LEFT, 0);
+    ctx.lineTo(NOTEBOOK_MARGIN_LEFT, h);
     ctx.stroke();
+    return;
   }
 
-  ctx.strokeStyle = NOTEBOOK_MARGIN_COLOR;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(NOTEBOOK_MARGIN_LEFT, 0);
-  ctx.lineTo(NOTEBOOK_MARGIN_LEFT, h);
-  ctx.stroke();
+  if (type === "grid") {
+    ctx.strokeStyle = NOTEBOOK_LINE_COLOR;
+    ctx.lineWidth = 0.5;
+    // Horizontal
+    for (let y = NOTEBOOK_LINE_GAP; y < h; y += NOTEBOOK_LINE_GAP) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+    // Vertical
+    for (let x = NOTEBOOK_LINE_GAP; x < w; x += NOTEBOOK_LINE_GAP) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+    return;
+  }
 }
 
 function drawStroke(ctx: CanvasRenderingContext2D, el: StrokeElement) {
@@ -188,6 +227,7 @@ function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement) {
 export type DiaryCanvasHandle = {
   exportImage: () => Promise<Blob | null>;
   isEmpty: () => boolean;
+  getBackground: () => BackgroundType;
 };
 
 // --- Component ---
@@ -204,6 +244,7 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
     const [fontSizeIndex, setFontSizeIndex] = useState(1);
     const [fontFamily, setFontFamily] = useState<FontId>("serif");
     const [textAlign, setTextAlign] = useState<TextAlign>("left");
+    const [background, setBackground] = useState<BackgroundType>("ruled");
 
     const [history, dispatch] = useReducer(historyReducer, {
       elements: [],
@@ -239,11 +280,11 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
       return () => window.removeEventListener("resize", update);
     }, [width, onScaleChange]);
 
-    // Draw notebook background once
+    // Draw notebook background (redraws when background type changes)
     useEffect(() => {
       const ctx = bgCanvasRef.current?.getContext("2d");
-      if (ctx) drawNotebookBackground(ctx, width, height);
-    }, [width, height]);
+      if (ctx) drawNotebookBackground(ctx, width, height, background);
+    }, [width, height, background]);
 
     // Redraw all elements
     const redraw = useCallback(() => {
@@ -327,17 +368,19 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
     // --- Export ---
 
     const exportImage = useCallback(async (): Promise<Blob | null> => {
-      const bg = bgCanvasRef.current;
       const draw = drawCanvasRef.current;
-      if (!bg || !draw) return null;
+      if (!draw) return null;
 
+      // Export a transparent PNG containing only strokes + text. The
+      // notebook ruling / grid is rendered with CSS at view time based on
+      // the background type stored alongside the entry — see
+      // frontend/src/app/(app)/groups/[id]/page-viewer.tsx.
       const c = document.createElement("canvas");
       c.width = width;
       c.height = height;
       const ctx = c.getContext("2d");
       if (!ctx) return null;
 
-      ctx.drawImage(bg, 0, 0);
       ctx.drawImage(draw, 0, 0);
 
       // Draw text boxes onto export canvas
@@ -410,9 +453,11 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
     );
 
     // Expose handle to parent via ref
-    useImperativeHandle(ref, () => ({ exportImage, isEmpty }), [
+    const getBackground = useCallback(() => background, [background]);
+    useImperativeHandle(ref, () => ({ exportImage, isEmpty, getBackground }), [
       exportImage,
       isEmpty,
+      getBackground,
     ]);
 
     const handleToolChange = (t: Tool) => {
@@ -434,6 +479,8 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
           onFontFamilyChange={setFontFamily}
           textAlign={textAlign}
           onTextAlignChange={setTextAlign}
+          background={background}
+          onBackgroundChange={setBackground}
           canUndo={history.elements.length > 0}
           canRedo={history.undone.length > 0}
           onUndo={handleUndo}

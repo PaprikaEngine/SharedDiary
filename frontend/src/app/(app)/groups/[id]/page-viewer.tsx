@@ -7,11 +7,13 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { EntryStampsDisplay } from "./entries/[entryId]/entry-stamps-display";
 import { ReactionBar } from "./entries/[entryId]/reaction-bar";
 import { FlipbookPlayer } from "@/components/flipbook";
+import { CanvasBackground } from "@/components/diary-canvas";
 
 type EntryData = {
   id: string;
   body: string | null;
   created_at: string;
+  canvas_background: "ruled" | "plain" | "grid" | null;
   author: { id: string; name: string; avatar_url: string | null } | null;
   media: { id: string; type: string; url: string; order: number; width: number | null; height: number | null }[] | null;
   stamps: { id: string; x: number; y: number; scale: number; rotation: number; stamp: { url: string; thumbnail_url: string | null } }[];
@@ -35,6 +37,11 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
   const entry = entries[index];
   const pageNumber = totalCount - index; // newest = totalCount, oldest = 1
   const sortedMedia = entry?.media?.sort((a, b) => a.order - b.order) ?? [];
+  // Canvas image is uploaded to `{group}/{entry}/canvas.png` — split it
+  // from attached photos/videos so the handwritten page renders full-width
+  // in its natural 4:3 aspect ratio.
+  const canvasMedia = sortedMedia.find((m) => m.type === "image" && m.url.endsWith("/canvas.png")) ?? null;
+  const attachedMedia = sortedMedia.filter((m) => m !== canvasMedia);
 
   const flip = useCallback((dir: "prev" | "next") => {
     const newIndex = dir === "prev" ? index + 1 : index - 1;
@@ -84,15 +91,18 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Page — fill available height */}
+      {/* Page — size to content (matches the 4:3 canvas written on /new).
+          When the entry has a handwritten canvas we render the notebook
+          background as SVG inside the canvas box, so the paper article
+          itself is plain — no double rulings. */}
       <article
-        className={`paper rounded-xl px-6 sm:px-10 pt-8 pb-10 page-shadow relative flex-1 min-h-[60vh] transition-all duration-150 ${
+        className={`${canvasMedia ? "paper-plain" : "paper"} rounded-xl px-6 sm:px-10 pt-8 pb-10 page-shadow relative transition-all duration-150 ${
           direction === "left" ? "translate-x-[-8px] opacity-80" :
           direction === "right" ? "translate-x-[8px] opacity-80" : ""
         }`}
       >
-        {/* Red margin line */}
-        <div className="absolute left-10 sm:left-14 top-0 bottom-0 w-px bg-coral/25" />
+        {/* Red margin line — only for non-canvas entries */}
+        {!canvasMedia && <div className="absolute left-10 sm:left-14 top-0 bottom-0 w-px bg-coral/25" />}
 
         {/* Author + date */}
         <div className="flex items-center gap-3 mb-6 pl-5 sm:pl-8">
@@ -118,11 +128,33 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
           </div>
         )}
 
-        {/* Media */}
-        {sortedMedia.length > 0 && (
+        {/* Canvas (handwritten diary page).
+            Layers (back to front):
+              1. <CanvasBackground /> — SVG notebook ruling / grid / plain
+              2. <Image> — transparent PNG of strokes + text boxes
+              3. <EntryStampsDisplay> — positioned stamps */}
+        {canvasMedia && (
+          <div className="mb-6">
+            <div className="relative aspect-[4/3] w-full max-w-[800px] mx-auto rounded-lg overflow-hidden border border-cream-dark/40">
+              <CanvasBackground
+                type={entry.canvas_background ?? "ruled"}
+                className="absolute inset-0 w-full h-full"
+              />
+              <Image src={canvasMedia.url} alt="" fill className="object-contain" sizes="(max-width: 800px) 100vw, 800px" />
+              {entry.stamps.length > 0 && (
+                <div className="absolute inset-0 pointer-events-none">
+                  <EntryStampsDisplay stamps={entry.stamps} canvasWidth={800} canvasHeight={600} />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Other attached media (photos, videos) — thumbnail grid */}
+        {attachedMedia.length > 0 && (
           <div className="pl-5 sm:pl-8 mb-6">
-            <div className={`grid gap-3 ${sortedMedia.length === 1 ? "grid-cols-1 max-w-md" : "grid-cols-2"}`}>
-              {sortedMedia.map((media) =>
+            <div className={`grid gap-3 ${attachedMedia.length === 1 ? "grid-cols-1 max-w-md" : "grid-cols-2"}`}>
+              {attachedMedia.map((media) =>
                 media.type === "video" ? (
                   <div key={media.id} className="relative rounded-lg overflow-hidden bg-ink/5">
                     <video src={media.url} controls preload="metadata" playsInline className="w-full max-h-80 rounded-lg" />
@@ -137,8 +169,8 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
           </div>
         )}
 
-        {/* Stamps */}
-        {entry.stamps.length > 0 && sortedMedia.length > 0 && (
+        {/* Stamps — only when there's no canvas (canvas renders stamps as an overlay above) */}
+        {entry.stamps.length > 0 && !canvasMedia && (
           <div className="pl-5 sm:pl-8">
             <EntryStampsDisplay stamps={entry.stamps} canvasWidth={800} canvasHeight={600} />
           </div>

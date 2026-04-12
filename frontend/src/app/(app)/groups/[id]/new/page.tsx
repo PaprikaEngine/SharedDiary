@@ -26,6 +26,8 @@ export default function NewEntryPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [nextBatonHolder, setNextBatonHolder] = useState<string | null>(null);
+  // `members` excludes the current user — you can't pass the baton to
+  // yourself, that would break the whole exchange-diary concept.
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
   const [membersLoaded, setMembersLoaded] = useState(false);
   const [videos, setVideos] = useState<VideoPreview[]>([]);
@@ -49,8 +51,9 @@ export default function NewEntryPage() {
       const { data } = await (supabase as any).from("group_members").select("user:users(id, name)").eq("group_id", groupId);
       if (data && mounted) {
         const list = (data as { user: { id: string; name: string } | null }[]).map((m) => m.user).filter((u): u is { id: string; name: string } => u !== null);
-        setMembers(list);
-        setNextBatonHolder(list.find((m) => m.id !== user.id)?.id ?? user.id);
+        const others = list.filter((m) => m.id !== user.id);
+        setMembers(others);
+        setNextBatonHolder(others[0]?.id ?? null);
         setMembersLoaded(true);
       }
     };
@@ -99,14 +102,18 @@ export default function NewEntryPage() {
     setError(null);
     const canvasEmpty = canvasRef.current?.isEmpty() ?? true;
     if (canvasEmpty && images.length === 0 && videos.length === 0 && placedStamps.length === 0 && !flipbookData) { setError("日記を書くか画像・動画・スタンプ・パラパラアニメを追加してください"); return; }
-    if (!nextBatonHolder) { setError("次のバトンを渡す人を選んでください"); return; }
+    if (!nextBatonHolder) { setError("バトンを渡すメンバーがいません。先にグループに招待してください"); return; }
     setLoading(true);
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setError("ログインが必要です"); setLoading(false); return; }
 
+    // Capture the current canvas background type so the viewer can
+    // reproduce it exactly with CSS — the PNG is saved transparent.
+    const canvasBackground = !canvasEmpty ? canvasRef.current?.getBackground() ?? null : null;
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: entry, error: entryError } = await (supabase as any).from("entries").insert({ group_id: groupId, author_id: user.id, body: null }).select().single();
+    const { data: entry, error: entryError } = await (supabase as any).from("entries").insert({ group_id: groupId, author_id: user.id, body: null, canvas_background: canvasBackground }).select().single();
     if (entryError) { setError(entryError.message); setLoading(false); return; }
 
     if (!canvasEmpty && canvasRef.current) {
@@ -300,7 +307,15 @@ export default function NewEntryPage() {
           {/* Baton */}
           <div className="paper-plain rounded-xl p-4">
             <span className="block text-xs font-medium text-ink-light mb-2">次にバトンを渡す人</span>
-            {membersLoaded ? (
+            {!membersLoaded ? (
+              <p className="text-xs text-ink-light/50">読み込み中...</p>
+            ) : members.length === 0 ? (
+              <p className="text-xs text-ink-light">
+                他にメンバーがいません。
+                <Link href={`/groups/${groupId}`} className="text-moss hover:underline ml-1">グループに招待</Link>
+                してからバトンを渡してください。
+              </p>
+            ) : (
               <div className="flex flex-wrap gap-2">
                 {members.map((m) => (
                   <button key={m.id} type="button" onClick={() => setNextBatonHolder(m.id)}
@@ -310,13 +325,11 @@ export default function NewEntryPage() {
                   </button>
                 ))}
               </div>
-            ) : (
-              <p className="text-xs text-ink-light/50">読み込み中...</p>
             )}
           </div>
 
           {/* Submit */}
-          <Button type="submit" disabled={loading} className="w-full h-11 bg-moss hover:bg-moss-dark text-base rounded-xl">
+          <Button type="submit" disabled={loading || !nextBatonHolder} className="w-full h-11 bg-moss hover:bg-moss-dark text-base rounded-xl">
             {loading ? <Loader2 className="size-4 animate-spin" /> : "日記を投稿してバトンを渡す"}
           </Button>
         </form>

@@ -1,6 +1,6 @@
 "use client";
 
-import { PEN_COLORS } from "./diary-canvas";
+import { PEN_COLORS, BACKGROUND_OPTIONS, type BackgroundType } from "./diary-canvas";
 import { FONT_OPTIONS, type FontId, type TextAlign } from "./text-box-overlay";
 
 export type Tool = "pen" | "eraser" | "text";
@@ -19,6 +19,8 @@ type Props = {
   onFontFamilyChange: (font: FontId) => void;
   textAlign: TextAlign;
   onTextAlignChange: (align: TextAlign) => void;
+  background: BackgroundType;
+  onBackgroundChange: (bg: BackgroundType) => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -44,6 +46,8 @@ export function CanvasToolbar({
   onFontFamilyChange,
   textAlign,
   onTextAlignChange,
+  background,
+  onBackgroundChange,
   canUndo,
   canRedo,
   onUndo,
@@ -242,6 +246,28 @@ export function CanvasToolbar({
           ))}
         </div>
       )}
+
+      <Separator />
+
+      {/* Paper background */}
+      <div className="flex items-center gap-1">
+        <span className="text-xs text-ink-light mr-1">紙</span>
+        {BACKGROUND_OPTIONS.map((opt) => (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => onBackgroundChange(opt.id)}
+            className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+              background === opt.id
+                ? "bg-moss text-cream"
+                : "bg-cream-dark text-ink hover:bg-cream-dark/70"
+            }`}
+            title={opt.label}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
 
       <Separator />
 
