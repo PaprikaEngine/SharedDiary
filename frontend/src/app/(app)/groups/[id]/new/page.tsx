@@ -12,9 +12,9 @@ import type { DiaryCanvasHandle } from "@/components/diary-canvas";
 import { StampPicker, StampOverlayEditor, MAX_STAMPS } from "@/components/stamps";
 import type { PlacedStamp } from "@/components/stamps";
 import { MediaOverlayEditor, type PlacedMedia } from "@/components/placed-media";
-import { FlipbookEditor, type FlipbookData } from "@/components/flipbook";
+import { FlipbookEditor, type FlipbookData, DraggableFlipbook, type PlacedFlipbook } from "@/components/flipbook";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ImagePlus, Film, BookOpen, Loader2, X, Pencil } from "lucide-react";
+import { ArrowLeft, ImagePlus, Film, BookOpen, Loader2 } from "lucide-react";
 
 // Base display width on the 800×600 canvas for newly placed media.
 // Roughly 35% of page width — large enough to see, small enough that
@@ -22,6 +22,11 @@ import { ArrowLeft, ImagePlus, Film, BookOpen, Loader2, X, Pencil } from "lucide
 const MEDIA_BASE_WIDTH = 280;
 const MAX_IMAGES = 10;
 const MAX_VIDEOS = 3;
+
+// Default size for a newly-placed flipbook on the 800×600 canvas.
+// 4:3 to match the flipbook's internal aspect ratio.
+const FLIPBOOK_BASE_WIDTH = 300;
+const FLIPBOOK_BASE_HEIGHT = 225;
 
 // Read natural dimensions from a compressed image/video File so we can
 // preserve its aspect ratio when placed on the canvas.
@@ -70,6 +75,8 @@ export default function NewEntryPage() {
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
   const [membersLoaded, setMembersLoaded] = useState(false);
   const [flipbookData, setFlipbookData] = useState<FlipbookData | null>(null);
+  const [flipbookPlacement, setFlipbookPlacement] = useState<PlacedFlipbook | null>(null);
+  const [flipbookSelected, setFlipbookSelected] = useState(false);
   const [showFlipbookEditor, setShowFlipbookEditor] = useState(false);
   const [placedStamps, setPlacedStamps] = useState<PlacedStamp[]>([]);
   const [showStampPicker, setShowStampPicker] = useState(false);
@@ -256,10 +263,20 @@ export default function NewEntryPage() {
       await (supabase as any).from("entry_stamps").insert(placedStamps.map((s) => ({ entry_id: entry.id, stamp_id: s.stampId, x: s.x, y: s.y, scale: s.scale, rotation: s.rotation })));
     }
 
-    // Save flipbook animation
+    // Save flipbook animation with its canvas placement (if any)
     if (flipbookData && flipbookData.frames.length > 0) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: fb } = await (supabase as any).from("flipbooks").insert({ entry_id: entry.id, fps: flipbookData.fps, loop: flipbookData.loop }).select().single();
+      const { data: fb } = await (supabase as any).from("flipbooks").insert({
+        entry_id: entry.id,
+        fps: flipbookData.fps,
+        loop: flipbookData.loop,
+        x: flipbookPlacement?.x ?? null,
+        y: flipbookPlacement?.y ?? null,
+        scale: flipbookPlacement?.scale ?? null,
+        rotation: flipbookPlacement?.rotation ?? null,
+        base_width: flipbookPlacement?.baseWidth ?? null,
+        base_height: flipbookPlacement?.baseHeight ?? null,
+      }).select().single();
       if (fb) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase as any).from("flipbook_frames").insert(
@@ -308,6 +325,29 @@ export default function NewEntryPage() {
                       onMediaChange={setPlacedMedia}
                       canvasScale={canvasScale}
                     />
+                  )}
+                  {flipbookPlacement && (
+                    <div
+                      className="absolute inset-0"
+                      style={{ zIndex: 4 }}
+                      onClick={() => setFlipbookSelected(false)}
+                    >
+                      <DraggableFlipbook
+                        flipbook={flipbookPlacement}
+                        canvasScale={canvasScale}
+                        selected={flipbookSelected}
+                        onSelect={() => setFlipbookSelected(true)}
+                        onUpdate={(updates) =>
+                          setFlipbookPlacement((prev) => (prev ? { ...prev, ...updates } : prev))
+                        }
+                        onEdit={() => setShowFlipbookEditor(true)}
+                        onDelete={() => {
+                          setFlipbookPlacement(null);
+                          setFlipbookData(null);
+                          setFlipbookSelected(false);
+                        }}
+                      />
+                    </div>
                   )}
                   {placedStamps.length > 0 && (
                     <StampOverlayEditor stamps={placedStamps} onStampsChange={setPlacedStamps} canvasWidth={800} canvasHeight={600} canvasScale={canvasScale} />
@@ -360,42 +400,43 @@ export default function NewEntryPage() {
             <input ref={videoInputRef} type="file" accept="video/mp4,video/webm" multiple onChange={handleVideoSelect} className="hidden" />
           </div>
 
-          {/* Flipbook */}
-          <div className="paper-plain rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-medium text-ink-light">パラパラアニメ</span>
-              {flipbookData && (
-                <span className="text-[10px] text-ink-light/50">{flipbookData.frames.length}フレーム / {flipbookData.fps}fps</span>
-              )}
-            </div>
-            {flipbookData ? (
-              <div className="flex items-center gap-3">
-                <div className="flex-1 flex items-center gap-2 bg-moss/5 rounded-lg px-3 py-2">
-                  <BookOpen className="size-4 text-moss shrink-0" />
-                  <span className="text-xs text-ink">{flipbookData.frames.length}フレームのアニメーション</span>
-                </div>
-                <button type="button" onClick={() => setShowFlipbookEditor(true)}
-                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-moss hover:text-moss-dark transition-colors">
-                  <Pencil className="size-3" /> 編集
-                </button>
-                <button type="button" onClick={() => setFlipbookData(null)}
-                  className="size-6 flex items-center justify-center text-ink-light hover:text-red-500 transition-colors">
-                  <X className="size-3.5" />
-                </button>
-              </div>
-            ) : (
+          {/* Flipbook — placed as an overlay on the canvas. The side
+              panel just hosts the "add" entry point; once placed, the
+              user interacts with it directly on the notebook. */}
+          {!flipbookPlacement && (
+            <div className="paper-plain rounded-xl p-4">
               <button type="button" onClick={() => setShowFlipbookEditor(true)}
                 className="w-full flex items-center justify-center gap-2 py-3 border border-dashed border-cream-dark rounded-lg text-xs text-ink-light hover:border-moss/40 hover:text-moss transition-colors">
                 <BookOpen className="size-4" />
-                パラパラアニメを作る
+                パラパラアニメをノートに貼る
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
           {showFlipbookEditor && (
             <FlipbookEditor
               initial={flipbookData ?? undefined}
-              onSave={(data) => { setFlipbookData(data); setShowFlipbookEditor(false); }}
+              onSave={(data) => {
+                setFlipbookData(data);
+                // First-time save → drop it at canvas center. Otherwise
+                // preserve existing position/scale/rotation but refresh
+                // the preview to the new first frame.
+                const firstFrame = data.frames[0]?.canvasJson ?? null;
+                setFlipbookPlacement((prev) =>
+                  prev
+                    ? { ...prev, previewDataUrl: firstFrame }
+                    : {
+                        x: 400,
+                        y: 300,
+                        scale: 1,
+                        rotation: 0,
+                        baseWidth: FLIPBOOK_BASE_WIDTH,
+                        baseHeight: FLIPBOOK_BASE_HEIGHT,
+                        previewDataUrl: firstFrame,
+                      }
+                );
+                setShowFlipbookEditor(false);
+              }}
               onClose={() => setShowFlipbookEditor(false)}
             />
           )}

@@ -58,7 +58,12 @@ export default async function GroupPage({ params }: Props) {
   let hasBaton = true;
   let currentUserId: string | null = null;
 
-  type FlipbookRow = { fps: number; loop: boolean; frames: { order: number; canvas_json: string }[] };
+  type FlipbookRow = {
+    fps: number; loop: boolean;
+    x: number | null; y: number | null; scale: number | null;
+    rotation: number | null; base_width: number | null; base_height: number | null;
+    frames: { order: number; canvas_json: string }[];
+  };
 
   // Entries with full data for page viewer
   type EntryData = {
@@ -72,7 +77,12 @@ export default async function GroupPage({ params }: Props) {
       rotation: number | null; base_width: number | null;
     }[] | null;
     stamps: StampRow[]; reactions: ReactionRow[];
-    flipbook: { fps: number; loop: boolean; frames: { order: number; canvasJson: string }[] } | null;
+    flipbook: {
+      fps: number; loop: boolean;
+      x: number | null; y: number | null; scale: number | null;
+      rotation: number | null; base_width: number | null; base_height: number | null;
+      frames: { order: number; canvasJson: string }[];
+    } | null;
   };
 
   let entries: EntryData[] = [
@@ -150,7 +160,7 @@ export default async function GroupPage({ params }: Props) {
         if (rd) allReactions = rd as (ReactionRow & { entry_id: string })[];
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: fd } = await (supabase as any).from("flipbooks").select(`entry_id, fps, loop, frames:flipbook_frames(order, canvas_json)`).in("entry_id", entryIds);
+        const { data: fd } = await (supabase as any).from("flipbooks").select(`entry_id, fps, loop, x, y, scale, rotation, base_width, base_height, frames:flipbook_frames(order, canvas_json)`).in("entry_id", entryIds);
         if (fd) allFlipbooks = fd as (FlipbookRow & { entry_id: string })[];
       }
 
@@ -165,7 +175,12 @@ export default async function GroupPage({ params }: Props) {
           media: allMedia.filter((m) => m.entry_id === e.id),
           stamps: allStamps.filter((s) => s.entry_id === e.id),
           reactions: allReactions.filter((r) => r.entry_id === e.id),
-          flipbook: fb ? { fps: fb.fps, loop: fb.loop, frames: fb.frames.map((fr) => ({ order: fr.order, canvasJson: fr.canvas_json })) } : null,
+          flipbook: fb ? {
+            fps: fb.fps, loop: fb.loop,
+            x: fb.x, y: fb.y, scale: fb.scale, rotation: fb.rotation,
+            base_width: fb.base_width, base_height: fb.base_height,
+            frames: fb.frames.map((fr) => ({ order: fr.order, canvasJson: fr.canvas_json })),
+          } : null,
         };
       });
 

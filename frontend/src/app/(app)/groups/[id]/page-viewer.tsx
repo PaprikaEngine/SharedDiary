@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Trash2, Loader2 } from "lucide-react";
 import { EntryStampsDisplay } from "./entries/[entryId]/entry-stamps-display";
 import { ReactionBar } from "./entries/[entryId]/reaction-bar";
-import { FlipbookPlayer } from "@/components/flipbook";
+import { FlipbookPlayer, FlipbookOverlayDisplay } from "@/components/flipbook";
 import { CanvasBackground } from "@/components/diary-canvas";
 import { MediaOverlayDisplay } from "@/components/placed-media";
 import { createClient } from "@/lib/supabase/client";
@@ -28,7 +28,12 @@ type EntryData = {
   }[] | null;
   stamps: { id: string; x: number; y: number; scale: number; rotation: number; stamp: { url: string; thumbnail_url: string | null } }[];
   reactions: { stamp_id: string; user_id: string; stamp: { id: string; name: string; url: string; thumbnail_url: string | null } }[];
-  flipbook: { fps: number; loop: boolean; frames: { order: number; canvasJson: string }[] } | null;
+  flipbook: {
+    fps: number; loop: boolean;
+    x: number | null; y: number | null; scale: number | null;
+    rotation: number | null; base_width: number | null; base_height: number | null;
+    frames: { order: number; canvasJson: string }[];
+  } | null;
 };
 
 type Props = {
@@ -78,6 +83,18 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
     (m) => m.x == null || m.y == null || m.base_width == null
   );
 
+  // Flipbook placement — when x/y/base_width are set the flipbook
+  // renders as an overlay on the canvas box (mirroring placed media).
+  // Otherwise it falls through to the legacy below-canvas section.
+  const flipbookPlaced =
+    entry?.flipbook != null &&
+    entry.flipbook.frames.length > 0 &&
+    entry.flipbook.x != null &&
+    entry.flipbook.y != null &&
+    entry.flipbook.base_width != null &&
+    entry.flipbook.base_height != null;
+  const hasCanvasBox = !!canvasMedia || placedMedia.length > 0 || flipbookPlaced;
+
   // Track the canvas container's rendered width so MediaOverlayDisplay can
   // scale its canvas-space (800×600) coordinates down to the current size.
   const canvasBoxRef = useRef<HTMLDivElement>(null);
@@ -90,7 +107,7 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [canvasMedia]);
+  }, [hasCanvasBox]);
 
   const flip = useCallback((dir: "prev" | "next") => {
     const newIndex = dir === "prev" ? index + 1 : index - 1;
@@ -192,13 +209,13 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
           background as SVG inside the canvas box, so the paper article
           itself is plain — no double rulings. */}
       <article
-        className={`${canvasMedia || placedMedia.length > 0 ? "paper-plain" : "paper"} rounded-xl px-6 sm:px-10 pt-8 pb-10 page-shadow relative transition-all duration-150 ${
+        className={`${hasCanvasBox ? "paper-plain" : "paper"} rounded-xl px-6 sm:px-10 pt-8 pb-10 page-shadow relative transition-all duration-150 ${
           direction === "left" ? "translate-x-[-8px] opacity-80" :
           direction === "right" ? "translate-x-[8px] opacity-80" : ""
         }`}
       >
         {/* Red margin line — only for non-canvas entries */}
-        {!canvasMedia && placedMedia.length === 0 && <div className="absolute left-10 sm:left-14 top-0 bottom-0 w-px bg-coral/25" />}
+        {!hasCanvasBox && <div className="absolute left-10 sm:left-14 top-0 bottom-0 w-px bg-coral/25" />}
 
         {/* Author + date */}
         <div className="flex items-center gap-3 mb-6 pl-5 sm:pl-8">
@@ -230,7 +247,7 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
               2. <Image> — transparent PNG of strokes + text boxes
               3. <MediaOverlayDisplay> — placed photos/videos
               4. <EntryStampsDisplay> — positioned stamps */}
-        {(canvasMedia || placedMedia.length > 0) && (
+        {hasCanvasBox && (
           <div className="mb-6">
             <div
               ref={canvasBoxRef}
@@ -247,6 +264,23 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
                 <div className="absolute inset-0">
                   <MediaOverlayDisplay
                     media={placedMedia}
+                    canvasWidth={800}
+                    displayWidth={canvasDisplayWidth}
+                  />
+                </div>
+              )}
+              {flipbookPlaced && entry.flipbook && (
+                <div className="absolute inset-0">
+                  <FlipbookOverlayDisplay
+                    x={entry.flipbook.x as number}
+                    y={entry.flipbook.y as number}
+                    scale={entry.flipbook.scale ?? 1}
+                    rotation={entry.flipbook.rotation ?? 0}
+                    baseWidth={entry.flipbook.base_width as number}
+                    baseHeight={entry.flipbook.base_height as number}
+                    fps={entry.flipbook.fps}
+                    loop={entry.flipbook.loop}
+                    frames={entry.flipbook.frames}
                     canvasWidth={800}
                     displayWidth={canvasDisplayWidth}
                   />
@@ -281,14 +315,16 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
         )}
 
         {/* Stamps — only when there's no canvas box (canvas renders stamps as an overlay above) */}
-        {entry.stamps.length > 0 && !canvasMedia && placedMedia.length === 0 && (
+        {entry.stamps.length > 0 && !hasCanvasBox && (
           <div className="pl-5 sm:pl-8">
             <EntryStampsDisplay stamps={entry.stamps} canvasWidth={800} canvasHeight={600} />
           </div>
         )}
 
-        {/* Flipbook animation */}
-        {entry.flipbook && entry.flipbook.frames.length > 0 && (
+        {/* Flipbook animation — legacy fallback for entries written
+            before flipbook placement. Placed flipbooks render on the
+            canvas overlay above. */}
+        {entry.flipbook && entry.flipbook.frames.length > 0 && !flipbookPlaced && (
           <div className="pl-5 sm:pl-8 mb-6">
             <p className="text-[10px] text-ink-light/40 mb-1.5 uppercase tracking-wider">パラパラアニメ</p>
             <FlipbookPlayer
