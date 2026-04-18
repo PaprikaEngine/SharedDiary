@@ -1,33 +1,30 @@
 import type { Metadata, Viewport } from "next";
-import { Noto_Serif_JP, Lora, Zen_Maru_Gothic, Yomogi } from "next/font/google";
+import { Geist, Geist_Mono, Zen_Kaku_Gothic_New } from "next/font/google";
 import "./globals.css";
 
-const notoSerifJP = Noto_Serif_JP({
-  variable: "--font-noto-serif-jp",
+const geistSans = Geist({
+  variable: "--font-geist-sans",
   subsets: ["latin"],
-  weight: ["400", "500", "700"],
+  weight: ["300", "400", "500", "600", "700"],
+  display: "swap",
 });
 
-const lora = Lora({
-  variable: "--font-lora",
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
   subsets: ["latin"],
-  weight: ["400", "500", "700"],
+  weight: ["400", "500", "600"],
+  display: "swap",
 });
 
-const zenMaruGothic = Zen_Maru_Gothic({
-  variable: "--font-zen-maru-gothic",
+const zenKaku = Zen_Kaku_Gothic_New({
+  variable: "--font-zen-kaku",
   subsets: ["latin"],
   weight: ["400", "500", "700"],
-});
-
-const yomogi = Yomogi({
-  variable: "--font-yomogi",
-  subsets: ["latin"],
-  weight: ["400"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "SharedDiary - 交換日記",
+  title: "SharedDiary — 交換日記",
   description: "懐かしい交換日記を、もう一度。",
   manifest: "/manifest.json",
   appleWebApp: {
@@ -42,7 +39,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#5B7A5E",
+  themeColor: "#181816",
 };
 
 export default function RootLayout({
@@ -53,7 +50,7 @@ export default function RootLayout({
   return (
     <html
       lang="ja"
-      className={`${notoSerifJP.variable} ${lora.variable} ${zenMaruGothic.variable} ${yomogi.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${zenKaku.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-cream text-ink">{children}</body>
     </html>

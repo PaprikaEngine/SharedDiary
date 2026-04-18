@@ -19,7 +19,7 @@ export function BatonStatus({ currentHolder, hasBaton, groupId }: Props) {
 
   return (
     <div className={`rounded-xl px-4 py-3 flex items-center gap-3 ${hasBaton ? "bg-moss/8 border border-moss/20" : "bg-cream-dark/40"}`}>
-      <span className="text-xl shrink-0">🎀</span>
+      <span className={`dot-nb shrink-0 ${hasBaton ? "dot-nb-signal pulse-signal" : "dot-nb-accent"}`} />
       <div className="flex-1 min-w-0">
         {hasBaton ? (
           <>

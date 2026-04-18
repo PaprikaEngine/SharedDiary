@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
+import { Loader2, Mail } from "lucide-react";
 
 export default function ResetPasswordPage() {
   const [email, setEmail] = useState("");
@@ -33,7 +33,9 @@ export default function ResetPasswordPage() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="paper-plain rounded-xl p-8 max-w-sm w-full text-center">
-          <div className="text-4xl mb-3">📧</div>
+          <div className="mx-auto mb-4 size-11 rounded-[10px] flex items-center justify-center" style={{ background: "var(--paper-alt)", color: "var(--ink-2)" }}>
+            <Mail className="size-5" strokeWidth={1.6} />
+          </div>
           <h1 className="text-lg font-semibold text-ink mb-2">メールを送信しました</h1>
           <p className="text-sm text-ink-light leading-relaxed mb-6">
             {email} にリセット用リンクを送りました。
