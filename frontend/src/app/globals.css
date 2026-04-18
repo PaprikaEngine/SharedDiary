@@ -1,13 +1,79 @@
 @import "tailwindcss";
 
-:root {
-  --color-cream: #FDF6E3;
-  --color-cream-dark: #F5E6C8;
-  --color-moss: #5D7052;
-  --color-moss-light: #7A9B6D;
-  --color-moss-dark: #4A5A42;
-  --color-ink: #2C2C2C;
-  --color-ink-light: #4A4A4A;
+@layer base {
+  :root {
+    /* --- New palette: notebook-app, grown-up --- */
+    --surface: #F6F5F0;
+    --paper-bg: #FCFCF9;
+    --paper-alt: #F1EFE7;
+    --stroke: #E5E2D8;
+    --stroke-strong: #D3CFC0;
+
+    --ink-core: #181816;
+    --ink-2: #5C5A52;
+    --ink-3: #8F8D85;
+    --ink-4: #B5B2A7;
+
+    --accent-pine: #2F4A3A;
+    --accent-pine-hi: #3E6650;
+    --accent-pine-lo: #1E3125;
+    --accent-soft: rgba(47, 74, 58, 0.08);
+
+    --signal-amber: #C8975E;
+    --signal-hi: #E0AF70;
+    --signal-soft: rgba(200, 151, 94, 0.12);
+
+    --danger-red: #C85757;
+    --danger-soft: rgba(200, 87, 87, 0.08);
+
+    /* --- Legacy brand tokens remapped onto new palette --- */
+    --color-cream: var(--surface);
+    --color-cream-dark: var(--stroke);
+    --color-moss: var(--accent-pine);
+    --color-moss-light: var(--accent-pine-hi);
+    --color-moss-dark: var(--accent-pine-lo);
+    --color-ink: var(--ink-core);
+    --color-ink-light: var(--ink-2);
+    --color-coral: var(--signal-amber);
+    --color-coral-light: var(--signal-hi);
+
+    /* --- shadcn semantic tokens, retuned to the new palette --- */
+    --radius: 0.625rem;
+    --background: oklch(0.965 0.006 90);
+    --foreground: oklch(0.17 0.005 80);
+    --card: oklch(0.985 0.004 85);
+    --card-foreground: oklch(0.17 0.005 80);
+    --popover: oklch(0.985 0.004 85);
+    --popover-foreground: oklch(0.17 0.005 80);
+    --primary: oklch(0.17 0.005 80);
+    --primary-foreground: oklch(0.985 0.004 85);
+    --secondary: oklch(0.94 0.010 85);
+    --secondary-foreground: oklch(0.25 0.01 80);
+    --muted: oklch(0.94 0.010 85);
+    --muted-foreground: oklch(0.50 0.010 80);
+    --accent: oklch(0.38 0.045 155);
+    --accent-foreground: oklch(0.985 0.004 85);
+    --destructive: oklch(0.58 0.17 25);
+    --destructive-foreground: oklch(0.985 0.004 85);
+    --border: oklch(0.90 0.012 85);
+    --input: oklch(0.90 0.012 85);
+    --ring: oklch(0.17 0.005 80);
+
+    --chart-1: oklch(0.55 0.10 140);
+    --chart-2: oklch(0.60 0.10 170);
+    --chart-3: oklch(0.50 0.08 50);
+    --chart-4: oklch(0.65 0.12 80);
+    --chart-5: oklch(0.50 0.15 25);
+
+    --sidebar-background: oklch(0.97 0.006 90);
+    --sidebar-foreground: oklch(0.25 0.008 80);
+    --sidebar-primary: oklch(0.17 0.005 80);
+    --sidebar-primary-foreground: oklch(0.985 0.004 85);
+    --sidebar-accent: oklch(0.93 0.015 85);
+    --sidebar-accent-foreground: oklch(0.25 0.008 80);
+    --sidebar-border: oklch(0.90 0.012 85);
+    --sidebar-ring: oklch(0.17 0.005 80);
+  }
 }
 
 @theme inline {
@@ -18,11 +84,362 @@
   --color-moss-dark: var(--color-moss-dark);
   --color-ink: var(--color-ink);
   --color-ink-light: var(--color-ink-light);
-  --font-serif: var(--font-noto-serif-jp), var(--font-lora), serif;
+  --color-coral: var(--color-coral);
+  --color-coral-light: var(--color-coral-light);
+
+  /* Keep existing font aliases so pages using them still work,
+     but point everything at the modern sans stack. The .paper surface
+     still exists for the canvas viewer; handwriting / maru fall back
+     to Geist Sans so the global UI doesn't look twee. */
+  --font-sans: var(--font-geist-sans), "Zen Kaku Gothic New", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-serif: var(--font-geist-sans), "Zen Kaku Gothic New", sans-serif;
+  --font-maru: var(--font-geist-sans), "Zen Kaku Gothic New", sans-serif;
+  --font-handwriting: var(--font-geist-sans), "Zen Kaku Gothic New", sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar-background: var(--sidebar-background);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius: var(--radius);
+}
+
+/* --- Base --- */
+html {
+  background: var(--surface);
+  color: var(--ink-core);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "palt" 1, "liga" 1, "kern" 1, "ss01" 1, "ss02" 1;
 }
 
 body {
-  background: var(--color-cream);
-  color: var(--color-ink);
-  font-family: var(--font-serif);
+  background: var(--surface);
+  color: var(--ink-core);
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+  letter-spacing: -0.005em;
+}
+
+/* --- Surfaces --- */
+/* Keep .paper available for the diary canvas viewer, but without a body
+   background — callers can opt into ruled paper via the canvas component
+   itself when they need it. */
+.paper {
+  background-color: var(--paper-bg);
+}
+
+.paper-plain {
+  background-color: var(--paper-bg);
+  border: 1px solid var(--stroke);
+}
+
+.page-shadow {
+  box-shadow:
+    0 1px 0 rgba(24, 24, 22, 0.02),
+    0 8px 24px -12px rgba(24, 24, 22, 0.08);
+}
+
+/* Subtle divider used in place of heavy borders */
+.hairline {
+  border-color: var(--stroke);
+}
+
+/* Decorative "tape" is retired — neutralise to a no-op so pages
+   using it still lay out but no longer look like scrapbook washi. */
+.tape::before { content: none !important; }
+
+/* Stitch border reduced to a hairline */
+.stitch {
+  border: 1px solid var(--stroke);
+}
+
+/* Washi hover retired to a plain subtle background */
+.washi-hover { position: relative; }
+.washi-hover::after { display: none !important; }
+
+/* --- Reveal animation (kept) --- */
+@keyframes write-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-write-in { animation: write-in 0.4s ease-out both; }
+
+.stagger-children > * { animation: write-in 0.35s ease-out both; }
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 60ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 180ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 240ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 300ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 360ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 420ms; }
+
+/* ================================================================
+ * Notebook-app design system utilities
+ * (used by new markup — legacy pages continue to work via aliases)
+ * ================================================================ */
+
+@layer utilities {
+  .font-sans-ui { font-family: var(--font-sans); }
+  .font-mono { font-family: var(--font-mono); }
+
+  /* Text tiers */
+  .t-hi { color: var(--ink-core); }
+  .t-md { color: var(--ink-2); }
+  .t-lo { color: var(--ink-3); }
+  .t-xlo { color: var(--ink-4); }
+
+  /* Labels */
+  .kbd {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    color: var(--ink-3);
+    padding: 3px 6px;
+    border: 1px solid var(--stroke);
+    border-radius: 5px;
+    background: var(--paper-bg);
+  }
+  .meta {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--ink-3);
+  }
+  .meta-sm {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    color: var(--ink-3);
+  }
+
+  /* Hairline (new name that doesn't clash with legacy .hairline) */
+  .rule-hair { border-color: var(--stroke); }
+
+  /* Card */
+  .card-note {
+    background: var(--paper-bg);
+    border: 1px solid var(--stroke);
+    border-radius: 12px;
+    transition: border-color 200ms ease, box-shadow 200ms ease, transform 200ms ease;
+  }
+  .card-note:hover {
+    border-color: var(--stroke-strong);
+    box-shadow: 0 1px 0 rgba(24, 24, 22, 0.02),
+                0 8px 24px -12px rgba(24, 24, 22, 0.08);
+  }
+
+  /* Tile: transparent, brightens on hover */
+  .tile {
+    background: transparent;
+    border-radius: 10px;
+    transition: background 180ms ease;
+  }
+  .tile:hover { background: var(--paper-bg); }
+
+  /* Buttons — unified with shadcn spacing */
+  .btn-nb {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5em;
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    font-weight: 500;
+    letter-spacing: -0.005em;
+    padding: 0.65rem 1.1rem;
+    border-radius: 9px;
+    border: 1px solid transparent;
+    transition: background 160ms ease, color 160ms ease, border-color 160ms ease, transform 140ms ease;
+    line-height: 1.2;
+    cursor: pointer;
+  }
+  .btn-nb:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .btn-nb-primary {
+    background: var(--ink-core);
+    color: var(--paper-bg);
+    border-color: var(--ink-core);
+  }
+  .btn-nb-primary:hover:not(:disabled) { background: #000; border-color: #000; }
+
+  .btn-nb-accent {
+    background: var(--accent-pine);
+    color: var(--paper-bg);
+    border-color: var(--accent-pine);
+  }
+  .btn-nb-accent:hover:not(:disabled) {
+    background: var(--accent-pine-lo);
+    border-color: var(--accent-pine-lo);
+  }
+
+  .btn-nb-ghost {
+    background: var(--paper-bg);
+    color: var(--ink-core);
+    border-color: var(--stroke);
+  }
+  .btn-nb-ghost:hover:not(:disabled) {
+    background: var(--paper-alt);
+    border-color: var(--stroke-strong);
+  }
+
+  .btn-nb-flat {
+    background: transparent;
+    color: var(--ink-core);
+    border-color: transparent;
+  }
+  .btn-nb-flat:hover:not(:disabled) { background: var(--paper-alt); }
+
+  .btn-nb-sm { font-size: 12.5px; padding: 0.45rem 0.85rem; border-radius: 7px; }
+  .btn-nb-lg { font-size: 14.5px; padding: 0.85rem 1.4rem; border-radius: 10px; }
+  .btn-nb-block { width: 100%; }
+
+  /* Pill chip */
+  .chip-nb {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    font-family: var(--font-sans);
+    font-size: 11.5px;
+    font-weight: 500;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--paper-alt);
+    color: var(--ink-2);
+    border: 1px solid var(--stroke);
+    line-height: 1.3;
+  }
+  .chip-nb-accent {
+    background: var(--accent-soft);
+    color: var(--accent-pine-lo);
+    border-color: transparent;
+  }
+  .chip-nb-signal {
+    background: var(--signal-soft);
+    color: #7B5828;
+    border-color: transparent;
+  }
+  .chip-nb-ink {
+    background: var(--ink-core);
+    color: var(--paper-bg);
+    border-color: var(--ink-core);
+  }
+
+  /* Segmented control */
+  .seg-nb {
+    display: inline-flex;
+    padding: 3px;
+    background: var(--paper-alt);
+    border: 1px solid var(--stroke);
+    border-radius: 9px;
+    gap: 2px;
+  }
+  .seg-nb button {
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    font-weight: 500;
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    color: var(--ink-2);
+    transition: background 160ms ease, color 160ms ease;
+  }
+  .seg-nb button:hover { color: var(--ink-core); }
+  .seg-nb button[data-active="true"] {
+    background: var(--paper-bg);
+    color: var(--ink-core);
+    box-shadow: 0 1px 2px rgba(24, 24, 22, 0.06);
+  }
+
+  /* Field */
+  .field-nb {
+    width: 100%;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    color: var(--ink-core);
+    background: var(--paper-bg);
+    border: 1px solid var(--stroke);
+    border-radius: 9px;
+    padding: 0.7rem 0.9rem;
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+  }
+  .field-nb:focus {
+    outline: none;
+    border-color: var(--ink-core);
+    box-shadow: 0 0 0 3px rgba(24, 24, 22, 0.06);
+  }
+  .field-nb-lg { font-size: 16px; padding: 0.85rem 1rem; }
+
+  /* Avatar */
+  .avatar-nb {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--paper-alt);
+    border: 1px solid var(--stroke);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--ink-2);
+    line-height: 1;
+  }
+  .avatar-nb-lg { width: 40px; height: 40px; border-radius: 10px; font-size: 14px; }
+  .avatar-nb-xl { width: 52px; height: 52px; border-radius: 12px; font-size: 17px; }
+  .avatar-nb-accent { background: var(--accent-pine); color: var(--paper-bg); border-color: var(--accent-pine); }
+  .avatar-nb-signal { background: var(--signal-amber); color: var(--paper-bg); border-color: var(--signal-amber); }
+
+  /* Status dot */
+  .dot-nb { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-4); display: inline-block; }
+  .dot-nb-signal { background: var(--signal-amber); box-shadow: 0 0 0 3px var(--signal-soft); }
+  .dot-nb-accent { background: var(--accent-pine); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  /* Pulse for "your turn" */
+  @keyframes signalPulse {
+    0%, 100% { box-shadow: 0 0 0 0 var(--signal-soft); }
+    50% { box-shadow: 0 0 0 6px transparent; }
+  }
+  .pulse-signal { animation: signalPulse 2.4s ease-in-out infinite; }
+
+  /* Divider */
+  .divider { height: 1px; background: var(--stroke); }
+}
+
+/* Selection */
+::selection {
+  background: var(--accent-pine);
+  color: var(--paper-bg);
 }

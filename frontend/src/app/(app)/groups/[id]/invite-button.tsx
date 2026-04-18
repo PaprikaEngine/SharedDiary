@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Link2, Copy, Check, Loader2 } from "lucide-react";
 
-type Props = {
-  groupId: string;
-};
+type Props = { groupId: string };
 
 export function InviteButton({ groupId }: Props) {
   const [isOpen, setIsOpen] = useState(false);
@@ -16,31 +18,18 @@ export function InviteButton({ groupId }: Props) {
 
   const generateInvite = async () => {
     setLoading(true);
-
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Generate a random token
     const token = crypto.randomUUID();
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any)
-      .from("group_invitations")
-      .insert({
-        group_id: groupId,
-        token,
-        created_by: user.id,
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
-      });
+    const { error } = await (supabase as any).from("group_invitations").insert({
+      group_id: groupId, token, created_by: user.id,
+      expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+    });
+    if (error) { console.error(error); setLoading(false); return; }
 
-    if (error) {
-      console.error("Failed to create invite:", error);
-      setLoading(false);
-      return;
-    }
-
-    const url = `${window.location.origin}/invite/${token}`;
-    setInviteUrl(url);
+    setInviteUrl(`${window.location.origin}/invite/${token}`);
     setLoading(false);
     setIsOpen(true);
   };
@@ -54,47 +43,26 @@ export function InviteButton({ groupId }: Props) {
 
   return (
     <>
-      <button
-        onClick={generateInvite}
-        disabled={loading}
-        className="border border-moss text-moss px-4 py-2 rounded-lg text-sm font-medium hover:bg-moss hover:text-cream transition-colors disabled:opacity-50"
-      >
-        {loading ? "生成中..." : "招待リンク"}
+      <button onClick={generateInvite} disabled={loading} className="text-xs text-moss hover:text-moss-dark flex items-center gap-1 transition-colors disabled:opacity-50">
+        {loading ? <Loader2 className="size-3.5 animate-spin" /> : <Link2 className="size-3.5" />}
+        招待
       </button>
 
-      {isOpen && (
-        <div className="fixed inset-0 bg-ink/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-cream rounded-xl p-6 max-w-md w-full">
-            <h2 className="text-xl font-bold text-moss mb-2">招待リンク</h2>
-            <p className="text-sm text-ink-light mb-4">
-              このリンクを友達に送って、日記帳に招待しましょう
-            </p>
-
-            <div className="bg-white border border-cream-dark rounded-lg p-3 mb-4">
-              <p className="text-sm text-ink break-all">{inviteUrl}</p>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={copyToClipboard}
-                className="flex-1 bg-moss text-cream px-4 py-2 rounded-lg font-medium hover:bg-moss-dark transition-colors"
-              >
-                {copied ? "コピーしました!" : "コピー"}
-              </button>
-              <button
-                onClick={() => setIsOpen(false)}
-                className="flex-1 border border-ink-light text-ink px-4 py-2 rounded-lg font-medium hover:bg-cream-dark transition-colors"
-              >
-                閉じる
-              </button>
-            </div>
-
-            <p className="text-xs text-ink-light text-center mt-4">
-              このリンクは7日間有効です
-            </p>
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogContent className="sm:max-w-md bg-cream">
+          <DialogHeader>
+            <DialogTitle className="text-base">招待リンク</DialogTitle>
+            <DialogDescription>友達にこのリンクを送りましょう</DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2">
+            <Input value={inviteUrl ?? ""} readOnly className="text-xs h-9" />
+            <Button size="icon" variant="outline" onClick={copyToClipboard} className="shrink-0 size-9">
+              {copied ? <Check className="size-4 text-moss" /> : <Copy className="size-4" />}
+            </Button>
           </div>
-        </div>
-      )}
+          <p className="text-xs text-ink-light/50 text-center">7日間有効</p>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

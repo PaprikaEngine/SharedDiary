@@ -4,10 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ArrowLeft, Loader2 } from "lucide-react";
 
 export default function NewGroupPage() {
   const [name, setName] = useState("");
-  const [batonDeadlineDays, setBatonDeadlineDays] = useState(3);
+  const [batonDeadlineDays, setBatonDeadlineDays] = useState("3");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -19,103 +24,64 @@ export default function NewGroupPage() {
     setLoading(true);
 
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      setError("ログインが必要です");
-      setLoading(false);
-      return;
-    }
+    if (!user) { setError("ログインが必要です"); setLoading(false); return; }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (supabase as any)
       .from("groups")
-      .insert({
-        name,
-        baton_deadline_days: batonDeadlineDays,
-        created_by: user.id,
-      })
+      .insert({ name, baton_deadline_days: Number(batonDeadlineDays), created_by: user.id })
       .select()
       .single();
 
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-      return;
-    }
-
+    if (error) { setError(error.message); setLoading(false); return; }
     router.push(`/groups/${data.id}`);
     router.refresh();
   };
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-cream-dark bg-cream/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
-          <Link href="/groups" className="text-ink-light hover:text-ink">
-            ← 戻る
+      <header className="sticky top-0 z-10 bg-cream/90 backdrop-blur-sm border-b border-cream-dark/50">
+        <div className="max-w-2xl mx-auto px-5 h-14 flex items-center gap-3">
+          <Link href="/groups" className="text-ink-light hover:text-ink transition-colors">
+            <ArrowLeft className="size-5" />
           </Link>
-          <h1 className="text-2xl font-bold text-moss">新しい日記帳</h1>
+          <h1 className="text-base font-semibold text-ink">新しい日記帳</h1>
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-6 py-8">
-        <div className="bg-white border border-cream-dark rounded-xl p-6">
+      <main className="max-w-md mx-auto px-5 py-8">
+        <div className="paper-plain rounded-xl p-6">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
-              {error}
-            </div>
+            <div className="text-sm text-destructive bg-destructive/8 border border-destructive/15 rounded-lg px-3 py-2 mb-4">{error}</div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-ink mb-2">
-                日記帳の名前
-              </label>
-              <input
-                id="name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                maxLength={50}
-                className="w-full px-4 py-3 border border-cream-dark rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-moss focus:border-transparent"
-                placeholder="例: 高校の友達との日記"
-              />
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-1.5">
+              <Label htmlFor="name" className="text-xs text-ink-light">日記帳の名前</Label>
+              <Input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} required maxLength={50} placeholder="例: 高校の友達との日記" className="h-10" />
             </div>
 
-            <div>
-              <label htmlFor="deadline" className="block text-sm font-medium text-ink mb-2">
-                バトンの期限（日数）
-              </label>
-              <p className="text-sm text-ink-light mb-2">
-                バトンを持っている人が書く期限です
-              </p>
-              <select
-                id="deadline"
-                value={batonDeadlineDays}
-                onChange={(e) => setBatonDeadlineDays(Number(e.target.value))}
-                className="w-full px-4 py-3 border border-cream-dark rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-moss focus:border-transparent"
-              >
-                <option value={1}>1日</option>
-                <option value={3}>3日</option>
-                <option value={7}>1週間</option>
-                <option value={14}>2週間</option>
-                <option value={30}>1ヶ月</option>
-              </select>
+            <div className="space-y-1.5">
+              <Label htmlFor="deadline" className="text-xs text-ink-light">バトンの期限</Label>
+              <p className="text-xs text-ink-light/60">次の人が書くまでの期限です</p>
+              <Select value={batonDeadlineDays} onValueChange={setBatonDeadlineDays}>
+                <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1日</SelectItem>
+                  <SelectItem value="3">3日</SelectItem>
+                  <SelectItem value="7">1週間</SelectItem>
+                  <SelectItem value="14">2週間</SelectItem>
+                  <SelectItem value="30">1ヶ月</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading || !name.trim()}
-              className="w-full bg-moss text-cream px-6 py-3 rounded-lg font-medium hover:bg-moss-dark transition-colors disabled:opacity-50"
-            >
-              {loading ? "作成中..." : "日記帳を作成"}
-            </button>
+            <Button type="submit" disabled={loading || !name.trim()} className="w-full h-10 bg-moss hover:bg-moss-dark">
+              {loading ? <Loader2 className="size-4 animate-spin" /> : "日記帳を作成"}
+            </Button>
           </form>
         </div>
-
-        <p className="text-center text-sm text-ink-light mt-6">
-          作成後、招待リンクで友達を招待できます
-        </p>
+        <p className="text-center text-xs text-ink-light/50 mt-5">作成後、招待リンクで友達を招待できます</p>
       </main>
     </div>
   );

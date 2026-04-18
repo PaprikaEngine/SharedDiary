@@ -2,100 +2,69 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { EntryStampsDisplay } from "./entry-stamps-display";
+import { ReactionBar } from "./reaction-bar";
+import { FlipbookPlayer } from "@/components/flipbook";
 
-type Props = {
-  params: Promise<{ id: string; entryId: string }>;
-};
-
+type Props = { params: Promise<{ id: string; entryId: string }> };
 const isDemo = process.env.NEXT_PUBLIC_SUPABASE_URL === "https://demo.supabase.co";
 
 export default async function EntryPage({ params }: Props) {
   const { id: groupId, entryId } = await params;
 
   type EntryWithRelations = {
-    id: string;
-    group_id: string;
-    author_id: string;
-    body: string | null;
-    created_at: string;
+    id: string; group_id: string; author_id: string; body: string | null; created_at: string;
+    canvas_width: number | null; canvas_height: number | null;
     author: { id: string; name: string; avatar_url: string | null } | null;
     media: { id: string; type: string; url: string; order: number; width: number | null; height: number | null }[] | null;
   };
+  type EntryStampData = { id: string; x: number; y: number; scale: number; rotation: number; stamp: { url: string; thumbnail_url: string | null } };
+  type ReactionData = { stamp_id: string; user_id: string; stamp: { id: string; name: string; url: string; thumbnail_url: string | null } };
 
   let entry: EntryWithRelations = {
-    id: entryId,
-    group_id: groupId,
-    author_id: "demo",
-    body: "今日はいい天気だったね！公園でアイスを食べたよ🍦\n\nまた明日も遊ぼうね。",
+    id: entryId, group_id: groupId, author_id: "demo",
+    body: "今日はいい天気だったね！公園でアイスを食べたよ\n\nまた明日も遊ぼうね。",
     created_at: new Date().toISOString(),
-    author: { id: "demo", name: "ともだち", avatar_url: null },
-    media: null,
+    canvas_width: null, canvas_height: null,
+    author: { id: "demo", name: "ともだち", avatar_url: null }, media: null,
   };
   let prevEntry: { id: string } | null = null;
   let nextEntry: { id: string } | null = null;
+  let entryStamps: EntryStampData[] = [];
+  let reactions: ReactionData[] = [];
+  let flipbook: { fps: number; loop: boolean; frames: { order: number; canvasJson: string }[] } | null = null;
+  let currentUserId: string | null = null;
 
   if (!isDemo) {
     try {
       const supabase = await createClient();
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) redirect("/login");
 
-      if (!user) {
-        redirect("/login");
-      }
+      const { data: membership } = await supabase.from("group_members").select("role").eq("group_id", groupId).eq("user_id", user.id).single();
+      if (!membership) notFound();
 
-      // Check membership
-      const { data: membership } = await supabase
-        .from("group_members")
-        .select("role")
-        .eq("group_id", groupId)
-        .eq("user_id", user.id)
-        .single();
-
-      if (!membership) {
-        notFound();
-      }
-
-      // Get entry with author and media
-      const { data: entryData } = await supabase
-        .from("entries")
-        .select(`
-          *,
-          author:users(id, name, avatar_url),
-          media:entry_media(id, type, url, order, width, height)
-        `)
-        .eq("id", entryId)
-        .eq("group_id", groupId)
-        .single();
-
-      if (!entryData) {
-        notFound();
-      }
-
+      const { data: entryData } = await supabase.from("entries").select(`*, author:users(id, name, avatar_url), media:entry_media(id, type, url, order, width, height)`).eq("id", entryId).eq("group_id", groupId).single();
+      if (!entryData) notFound();
       entry = entryData as EntryWithRelations;
 
-      // Get adjacent entries for navigation
-      const entryCreatedAt = entry.created_at;
+      const c = entry.created_at;
+      const { data: p } = await supabase.from("entries").select("id").eq("group_id", groupId).lt("created_at", c).order("created_at", { ascending: false }).limit(1).single();
+      const { data: n } = await supabase.from("entries").select("id").eq("group_id", groupId).gt("created_at", c).order("created_at", { ascending: true }).limit(1).single();
+      prevEntry = p as { id: string } | null;
+      nextEntry = n as { id: string } | null;
+      currentUserId = user.id;
 
-      const { data: prevEntryData } = await supabase
-        .from("entries")
-        .select("id")
-        .eq("group_id", groupId)
-        .lt("created_at", entryCreatedAt)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
+      const { data: sd } = await supabase.from("entry_stamps").select(`id, x, y, scale, rotation, stamp:stamps(url, thumbnail_url)`).eq("entry_id", entryId);
+      if (sd) entryStamps = sd as unknown as EntryStampData[];
 
-      const { data: nextEntryData } = await supabase
-        .from("entries")
-        .select("id")
-        .eq("group_id", groupId)
-        .gt("created_at", entryCreatedAt)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .single();
+      const { data: rd } = await supabase.from("reactions").select(`stamp_id, user_id, stamp:stamps(id, name, url, thumbnail_url)`).eq("entry_id", entryId);
+      if (rd) reactions = rd as unknown as ReactionData[];
 
-      prevEntry = prevEntryData as { id: string } | null;
-      nextEntry = nextEntryData as { id: string } | null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: fd } = await (supabase as any).from("flipbooks").select(`fps, loop, frames:flipbook_frames(order, canvas_json)`).eq("entry_id", entryId).single();
+      if (fd) flipbook = { fps: fd.fps, loop: fd.loop, frames: (fd.frames as { order: number; canvas_json: string }[]).map((fr) => ({ order: fr.order, canvasJson: fr.canvas_json })) };
     } catch (e) {
       if ((e as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT")) throw e;
     }
@@ -105,96 +74,102 @@ export default async function EntryPage({ params }: Props) {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-cream-dark bg-cream/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
-          <Link href={`/groups/${groupId}`} className="text-ink-light hover:text-ink">
-            ← タイムライン
+      <header className="sticky top-0 z-10 bg-cream/90 backdrop-blur-sm border-b border-cream-dark/50">
+        <div className="max-w-2xl mx-auto px-5 h-14 flex items-center gap-3">
+          <Link href={`/groups/${groupId}`} className="text-ink-light hover:text-ink transition-colors">
+            <ArrowLeft className="size-5" />
           </Link>
+          <span className="text-sm text-ink-light">タイムラインに戻る</span>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-6 py-8">
-        {/* Entry Header */}
-        <div className="flex items-center gap-4 mb-6">
-          <div className="w-14 h-14 bg-moss-light rounded-full flex items-center justify-center text-cream text-xl font-medium">
-            {entry.author?.name?.charAt(0) ?? "?"}
-          </div>
-          <div>
-            <p className="text-lg font-medium text-ink">{entry.author?.name}</p>
-            <p className="text-sm text-ink-light">
-              {new Date(entry.created_at).toLocaleDateString("ja-JP", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-                weekday: "long",
-              })}
-            </p>
-          </div>
-        </div>
+      <main className="max-w-2xl mx-auto px-5 py-6">
+        {/* Entry as a "diary page" */}
+        <article className="paper rounded-xl px-6 pt-8 pb-6 page-shadow relative">
+          {/* Red margin line */}
+          <div className="absolute left-12 top-0 bottom-0 w-px bg-coral/25" />
 
-        {/* Entry Content */}
-        <div className="bg-white border border-cream-dark rounded-xl p-6 mb-6">
-          {entry.body ? (
-            <p className="text-ink whitespace-pre-wrap leading-relaxed">
-              {entry.body}
-            </p>
-          ) : (
-            <p className="text-ink-light italic">テキストなし</p>
-          )}
-        </div>
-
-        {/* Media Gallery */}
-        {sortedMedia.length > 0 && (
-          <div className="mb-8">
-            <div
-              className={`grid gap-3 ${
-                sortedMedia.length === 1
-                  ? "grid-cols-1"
-                  : sortedMedia.length === 2
-                  ? "grid-cols-2"
-                  : "grid-cols-2 md:grid-cols-3"
-              }`}
-            >
-              {sortedMedia.map((media) => (
-                <div
-                  key={media.id}
-                  className="relative aspect-square rounded-xl overflow-hidden bg-cream-dark"
-                >
-                  <Image
-                    src={media.url}
-                    alt="Entry media"
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-              ))}
+          {/* Author + date */}
+          <div className="flex items-center gap-3 mb-5 pl-6">
+            <span className="size-9 rounded-full bg-moss/15 text-moss text-sm font-bold flex items-center justify-center shrink-0">
+              {entry.author?.name?.charAt(0) ?? "?"}
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-ink">{entry.author?.name}</p>
+              <p className="text-xs text-ink-light/50">
+                {new Date(entry.created_at).toLocaleDateString("ja-JP", {
+                  year: "numeric", month: "long", day: "numeric", weekday: "short",
+                })}
+              </p>
             </div>
           </div>
-        )}
 
-        {/* Navigation */}
-        <div className="flex items-center justify-between pt-6 border-t border-cream-dark">
+          {/* Body text */}
+          {entry.body && (
+            <div className="pl-6 mb-5">
+              <p className="text-ink whitespace-pre-wrap leading-[32px] text-[15px]">
+                {entry.body}
+              </p>
+            </div>
+          )}
+
+          {/* Media */}
+          {sortedMedia.length > 0 && (
+            <div className="pl-6 mb-5">
+              <div className={`grid gap-2 ${sortedMedia.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+                {sortedMedia.map((media) =>
+                  media.type === "video" ? (
+                    <div key={media.id} className="relative rounded-lg overflow-hidden bg-ink/5">
+                      <video src={media.url} controls preload="metadata" playsInline className="w-full max-h-80 rounded-lg" />
+                    </div>
+                  ) : (
+                    <div key={media.id} className="relative aspect-square rounded-lg overflow-hidden bg-cream-dark/30">
+                      <Image src={media.url} alt="" fill className="object-cover" />
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Stamps */}
+          {entryStamps.length > 0 && sortedMedia.length > 0 && (
+            <div className="pl-6">
+              <EntryStampsDisplay stamps={entryStamps} canvasWidth={entry.canvas_width ?? 800} canvasHeight={entry.canvas_height ?? 600} />
+            </div>
+          )}
+
+          {/* Flipbook animation */}
+          {flipbook && flipbook.frames.length > 0 && (
+            <div className="pl-6 mb-5">
+              <p className="text-[10px] text-ink-light/40 mb-1.5 uppercase tracking-wider">パラパラアニメ</p>
+              <FlipbookPlayer
+                frames={flipbook.frames}
+                fps={flipbook.fps}
+                loop={flipbook.loop}
+                width={Math.min(360, 800 * 0.5)}
+              />
+            </div>
+          )}
+        </article>
+
+        {/* Reactions (outside the paper) */}
+        <div className="mt-4 pl-2">
+          <ReactionBar entryId={entryId} groupId={groupId} reactions={reactions} currentUserId={currentUserId} />
+        </div>
+
+        {/* Nav */}
+        <div className="flex items-center justify-between mt-6 text-sm">
           {prevEntry ? (
-            <Link
-              href={`/groups/${groupId}/entries/${prevEntry.id}`}
-              className="text-moss hover:underline"
-            >
-              ← 前の日記
+            <Link href={`/groups/${groupId}/entries/${prevEntry.id}`} className="flex items-center gap-1 text-ink-light hover:text-moss transition-colors">
+              <ChevronLeft className="size-4" /> 前の日記
             </Link>
-          ) : (
-            <span className="text-ink-light">最初の日記</span>
-          )}
-
+          ) : <span className="text-ink-light/40">最初の日記</span>}
           {nextEntry ? (
-            <Link
-              href={`/groups/${groupId}/entries/${nextEntry.id}`}
-              className="text-moss hover:underline"
-            >
-              次の日記 →
+            <Link href={`/groups/${groupId}/entries/${nextEntry.id}`} className="flex items-center gap-1 text-ink-light hover:text-moss transition-colors">
+              次の日記 <ChevronRight className="size-4" />
             </Link>
-          ) : (
-            <span className="text-ink-light">最新の日記</span>
-          )}
+          ) : <span className="text-ink-light/40">最新の日記</span>}
         </div>
       </main>
     </div>

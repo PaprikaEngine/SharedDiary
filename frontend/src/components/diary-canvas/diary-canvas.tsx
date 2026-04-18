@@ -10,6 +10,7 @@ import {
   forwardRef,
 } from "react";
 import { CanvasToolbar, type Tool, type PenColor } from "./canvas-toolbar";
+import { TextBoxOverlay, FONT_OPTIONS, type TextBox, type FontId, type TextAlign } from "./text-box-overlay";
 
 // --- Types ---
 
@@ -35,6 +36,10 @@ type CanvasElement = StrokeElement | TextElement;
 type Props = {
   width?: number;
   height?: number;
+  onScaleChange?: (scale: number) => void;
+  stampOverlay?: React.ReactNode;
+  onStampClick?: () => void;
+  stampCount?: number;
 };
 
 // --- History reducer ---
@@ -91,6 +96,14 @@ const NOTEBOOK_LINE_COLOR = "#C8D8E4";
 const NOTEBOOK_MARGIN_COLOR = "#E8A0A0";
 const NOTEBOOK_BG = "#FFFEF7";
 
+export type BackgroundType = "ruled" | "plain" | "grid";
+
+export const BACKGROUND_OPTIONS: { id: BackgroundType; label: string }[] = [
+  { id: "ruled", label: "罫線" },
+  { id: "plain", label: "無地" },
+  { id: "grid", label: "方眼" },
+];
+
 export const PEN_COLORS: { id: PenColor; value: string; label: string }[] = [
   { id: "black", value: "#2C2C2C", label: "黒" },
   { id: "blue", value: "#1A5276", label: "青" },
@@ -106,34 +119,65 @@ const TEXT_FONT_SIZES = [16, 20, 24];
 
 // --- Drawing helpers ---
 
-function drawNotebookBackground(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number
-) {
+function drawPaperTexture(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillStyle = NOTEBOOK_BG;
   ctx.fillRect(0, 0, w, h);
 
+  // Subtle paper grain
   ctx.fillStyle = "rgba(0,0,0,0.015)";
   for (let i = 0; i < 200; i++) {
     ctx.fillRect(Math.random() * w, Math.random() * h, 1, 1);
   }
+}
 
-  ctx.strokeStyle = NOTEBOOK_LINE_COLOR;
-  ctx.lineWidth = 0.5;
-  for (let y = NOTEBOOK_LINE_GAP; y < h; y += NOTEBOOK_LINE_GAP) {
+function drawNotebookBackground(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  type: BackgroundType = "ruled"
+) {
+  drawPaperTexture(ctx, w, h);
+
+  if (type === "plain") return;
+
+  if (type === "ruled") {
+    ctx.strokeStyle = NOTEBOOK_LINE_COLOR;
+    ctx.lineWidth = 0.5;
+    for (let y = NOTEBOOK_LINE_GAP; y < h; y += NOTEBOOK_LINE_GAP) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = NOTEBOOK_MARGIN_COLOR;
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(w, y);
+    ctx.moveTo(NOTEBOOK_MARGIN_LEFT, 0);
+    ctx.lineTo(NOTEBOOK_MARGIN_LEFT, h);
     ctx.stroke();
+    return;
   }
 
-  ctx.strokeStyle = NOTEBOOK_MARGIN_COLOR;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(NOTEBOOK_MARGIN_LEFT, 0);
-  ctx.lineTo(NOTEBOOK_MARGIN_LEFT, h);
-  ctx.stroke();
+  if (type === "grid") {
+    ctx.strokeStyle = NOTEBOOK_LINE_COLOR;
+    ctx.lineWidth = 0.5;
+    // Horizontal
+    for (let y = NOTEBOOK_LINE_GAP; y < h; y += NOTEBOOK_LINE_GAP) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+    // Vertical
+    for (let x = NOTEBOOK_LINE_GAP; x < w; x += NOTEBOOK_LINE_GAP) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+    return;
+  }
 }
 
 function drawStroke(ctx: CanvasRenderingContext2D, el: StrokeElement) {
@@ -183,12 +227,13 @@ function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement) {
 export type DiaryCanvasHandle = {
   exportImage: () => Promise<Blob | null>;
   isEmpty: () => boolean;
+  getBackground: () => BackgroundType;
 };
 
 // --- Component ---
 
 export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
-  function DiaryCanvas({ width = 800, height = 600 }, ref) {
+  function DiaryCanvas({ width = 800, height = 1131, onScaleChange, stampOverlay, onStampClick, stampCount }, ref) {
     const drawCanvasRef = useRef<HTMLCanvasElement>(null);
     const bgCanvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -197,6 +242,9 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
     const [penColor, setPenColor] = useState<PenColor>("black");
     const [lineWidthIndex, setLineWidthIndex] = useState(1);
     const [fontSizeIndex, setFontSizeIndex] = useState(1);
+    const [fontFamily, setFontFamily] = useState<FontId>("serif");
+    const [textAlign, setTextAlign] = useState<TextAlign>("left");
+    const [background, setBackground] = useState<BackgroundType>("ruled");
 
     const [history, dispatch] = useReducer(historyReducer, {
       elements: [],
@@ -204,18 +252,15 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
     });
     // Keep a ref in sync for use inside pointer event handlers (avoids stale closures)
     const elementsRef = useRef<CanvasElement[]>([]);
-    elementsRef.current = history.elements;
+    useEffect(() => {
+      elementsRef.current = history.elements;
+    }, [history.elements]);
 
     const [isDrawing, setIsDrawing] = useState(false);
     const currentStrokeRef = useRef<StrokeElement | null>(null);
 
-    // Text editing state
-    const [editingText, setEditingText] = useState<{
-      x: number;
-      y: number;
-    } | null>(null);
-    const [editingValue, setEditingValue] = useState("");
-    const textInputRef = useRef<HTMLTextAreaElement>(null);
+    // Text boxes (managed as objects, not baked into canvas)
+    const [textBoxes, setTextBoxes] = useState<TextBox[]>([]);
 
     const [scale, setScale] = useState(1);
 
@@ -226,18 +271,20 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
     useEffect(() => {
       const update = () => {
         if (!containerRef.current) return;
-        setScale(Math.min(1, containerRef.current.clientWidth / width));
+        const newScale = Math.min(1, containerRef.current.clientWidth / width);
+        setScale(newScale);
+        onScaleChange?.(newScale);
       };
       update();
       window.addEventListener("resize", update);
       return () => window.removeEventListener("resize", update);
-    }, [width]);
+    }, [width, onScaleChange]);
 
-    // Draw notebook background once
+    // Draw notebook background (redraws when background type changes)
     useEffect(() => {
       const ctx = bgCanvasRef.current?.getContext("2d");
-      if (ctx) drawNotebookBackground(ctx, width, height);
-    }, [width, height]);
+      if (ctx) drawNotebookBackground(ctx, width, height, background);
+    }, [width, height, background]);
 
     // Redraw all elements
     const redraw = useCallback(() => {
@@ -263,13 +310,8 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
     };
 
     const handlePointerDown = (e: React.PointerEvent) => {
-      if (tool === "text") {
-        commitEditingText();
-        const pt = getPoint(e);
-        setEditingText(pt);
-        setEditingValue("");
-        return;
-      }
+      // Text tool is handled by TextBoxOverlay
+      if (tool === "text") return;
 
       if (tool !== "pen" && tool !== "eraser") return;
       e.preventDefault();
@@ -308,37 +350,9 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
       }
     };
 
-    // --- Text editing ---
-
-    const commitEditingText = useCallback(() => {
-      if (!editingText || !editingValue.trim()) {
-        setEditingText(null);
-        setEditingValue("");
-        return;
-      }
-      const textEl: TextElement = {
-        type: "text",
-        x: editingText.x,
-        y: editingText.y,
-        text: editingValue,
-        color: colorValue,
-        fontSize: TEXT_FONT_SIZES[fontSizeIndex],
-      };
-      dispatch({ type: "push", element: textEl });
-      setEditingText(null);
-      setEditingValue("");
-    }, [editingText, editingValue, colorValue, fontSizeIndex]);
-
-    useEffect(() => {
-      if (editingText && textInputRef.current) {
-        textInputRef.current.focus();
-      }
-    }, [editingText]);
-
     // --- Undo / Redo / Clear ---
 
     const handleUndo = () => {
-      commitEditingText();
       dispatch({ type: "undo" });
     };
 
@@ -347,43 +361,106 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
     };
 
     const handleClear = () => {
-      commitEditingText();
       dispatch({ type: "clear" });
+      setTextBoxes([]);
     };
 
     // --- Export ---
 
     const exportImage = useCallback(async (): Promise<Blob | null> => {
-      const bg = bgCanvasRef.current;
       const draw = drawCanvasRef.current;
-      if (!bg || !draw) return null;
+      if (!draw) return null;
 
+      // Export a transparent PNG containing only strokes + text. The
+      // notebook ruling / grid is rendered with CSS at view time based on
+      // the background type stored alongside the entry — see
+      // frontend/src/app/(app)/groups/[id]/page-viewer.tsx.
       const c = document.createElement("canvas");
       c.width = width;
       c.height = height;
       const ctx = c.getContext("2d");
       if (!ctx) return null;
 
-      ctx.drawImage(bg, 0, 0);
       ctx.drawImage(draw, 0, 0);
 
+      // Draw text boxes onto export canvas
+      for (const box of textBoxes) {
+        if (!box.text.trim()) continue;
+        ctx.save();
+
+        const canvasFont = FONT_OPTIONS.find((f) => f.id === box.fontFamily)?.canvasFont ?? FONT_OPTIONS[0].canvasFont;
+        ctx.font = `${box.fontSize}px ${canvasFont}`;
+        ctx.fillStyle = box.color;
+        ctx.textBaseline = "top";
+
+        const padding = 8;
+        const lineHeight = box.fontSize * 1.5;
+        const maxWidth = box.w - padding * 2;
+
+        // Apply rotation around center of the box
+        if (box.rotation) {
+          const cx = box.x + box.w / 2;
+          const cy = box.y + box.h / 2;
+          ctx.translate(cx, cy);
+          ctx.rotate((box.rotation * Math.PI) / 180);
+          ctx.translate(-cx, -cy);
+        }
+
+        // Word-wrap text
+        const lines: string[] = [];
+        for (const paragraph of box.text.split("\n")) {
+          if (paragraph === "") {
+            lines.push("");
+            continue;
+          }
+          let currentLine = "";
+          for (const char of paragraph) {
+            const testLine = currentLine + char;
+            const metrics = ctx.measureText(testLine);
+            if (metrics.width > maxWidth && currentLine) {
+              lines.push(currentLine);
+              currentLine = char;
+            } else {
+              currentLine = testLine;
+            }
+          }
+          if (currentLine) lines.push(currentLine);
+        }
+
+        for (let i = 0; i < lines.length; i++) {
+          const lineText = lines[i];
+          let drawX = box.x + padding;
+
+          if (box.align === "center") {
+            const lineWidth = ctx.measureText(lineText).width;
+            drawX = box.x + padding + (maxWidth - lineWidth) / 2;
+          } else if (box.align === "right") {
+            const lineWidth = ctx.measureText(lineText).width;
+            drawX = box.x + padding + (maxWidth - lineWidth);
+          }
+
+          ctx.fillText(lineText, drawX, box.y + padding + i * lineHeight);
+        }
+        ctx.restore();
+      }
+
       return new Promise((resolve) => c.toBlob((b) => resolve(b), "image/png"));
-    }, [width, height]);
+    }, [width, height, textBoxes]);
 
     const isEmpty = useCallback(
-      () => history.elements.length === 0,
-      [history.elements]
+      () => history.elements.length === 0 && textBoxes.every((b) => !b.text.trim()),
+      [history.elements, textBoxes]
     );
 
     // Expose handle to parent via ref
-    useImperativeHandle(ref, () => ({ exportImage, isEmpty }), [
+    const getBackground = useCallback(() => background, [background]);
+    useImperativeHandle(ref, () => ({ exportImage, isEmpty, getBackground }), [
       exportImage,
       isEmpty,
+      getBackground,
     ]);
 
-    // --- Tool change: commit text if switching away ---
     const handleToolChange = (t: Tool) => {
-      if (tool === "text" && t !== "text") commitEditingText();
       setTool(t);
     };
 
@@ -398,11 +475,19 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
           onLineWidthChange={setLineWidthIndex}
           fontSizeIndex={fontSizeIndex}
           onFontSizeChange={setFontSizeIndex}
+          fontFamily={fontFamily}
+          onFontFamilyChange={setFontFamily}
+          textAlign={textAlign}
+          onTextAlignChange={setTextAlign}
+          background={background}
+          onBackgroundChange={setBackground}
           canUndo={history.elements.length > 0}
           canRedo={history.undone.length > 0}
           onUndo={handleUndo}
           onRedo={handleRedo}
           onClear={handleClear}
+          onStampClick={onStampClick}
+          stampCount={stampCount}
         />
 
         <div
@@ -443,33 +528,25 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
             onPointerLeave={handlePointerUp}
           />
 
-          {editingText && (
-            <textarea
-              ref={textInputRef}
-              value={editingValue}
-              onChange={(e) => setEditingValue(e.target.value)}
-              onBlur={commitEditingText}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  setEditingText(null);
-                  setEditingValue("");
-                }
-              }}
-              className="absolute bg-transparent border border-dashed border-moss/50 rounded outline-none resize-none p-1"
-              style={{
-                left: editingText.x * scale,
-                top: editingText.y * scale,
-                fontSize: TEXT_FONT_SIZES[fontSizeIndex] * scale,
-                lineHeight: 1.5,
-                color: colorValue,
-                fontFamily: '"Noto Serif JP", serif',
-                minWidth: 120 * scale,
-                minHeight: TEXT_FONT_SIZES[fontSizeIndex] * 1.5 * scale + 8,
-                zIndex: 10,
-              }}
-              placeholder="テキストを入力..."
-            />
-          )}
+          {/* Stamp overlay — disable interaction when text tool is active */}
+          <div style={{ pointerEvents: tool === "text" ? "none" : "auto" }}>
+            {stampOverlay}
+          </div>
+
+          {/* Text box overlay */}
+          <TextBoxOverlay
+            textBoxes={textBoxes}
+            onTextBoxesChange={setTextBoxes}
+            canvasScale={scale}
+            canvasWidth={width}
+            canvasHeight={height}
+            activeToolIsText={tool === "text"}
+            penColor={colorValue}
+            fontSize={TEXT_FONT_SIZES[fontSizeIndex]}
+            fontFamily={fontFamily}
+            align={textAlign}
+            onTextBoxCreated={() => {}}
+          />
         </div>
       </div>
     );
