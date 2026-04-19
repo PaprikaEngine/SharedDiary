@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { NotificationSettings } from "@/components/notification-settings";
+import { ProfileSettings } from "@/components/profile-settings";
+import { DeleteAccount } from "@/components/delete-account";
 
 export default function SettingsPage() {
   return (
@@ -16,8 +18,16 @@ export default function SettingsPage() {
 
       <main className="max-w-2xl mx-auto px-5 py-6 space-y-6">
         <section>
+          <h2 className="text-sm font-medium text-ink-light mb-3">プロフィール</h2>
+          <ProfileSettings />
+        </section>
+        <section>
           <h2 className="text-sm font-medium text-ink-light mb-3">通知</h2>
           <NotificationSettings />
+        </section>
+        <section>
+          <h2 className="text-sm font-medium text-destructive/80 mb-3">危険な操作</h2>
+          <DeleteAccount />
         </section>
       </main>
     </div>
