@@ -82,10 +82,11 @@ export function GroupMenu({ groupId, currentUserId, isOwner, hasBaton, currentHo
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-ink-light hover:text-ink transition-colors"
+        className="btn btn-flat btn-sm"
         title="グループ設定"
+        aria-label="グループ設定"
       >
-        <MoreHorizontal className="size-5" />
+        <MoreHorizontal className="size-4" strokeWidth={1.6} />
       </button>
 
       <Dialog open={open} onOpenChange={(o) => (o ? setOpen(true) : close())}>

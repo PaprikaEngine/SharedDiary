@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Plus, Settings, ArrowRight, BookOpen } from "lucide-react";
@@ -9,6 +10,7 @@ export default async function GroupsPage() {
   type GroupWithHolder = {
     id: string;
     name: string;
+    cover_image: string | null;
     current_holder: { name: string } | null;
   };
 
@@ -16,8 +18,8 @@ export default async function GroupsPage() {
 
   if (isDemo) {
     groups = [
-      { id: "demo-1", name: "高校の友達との日記", current_holder: { name: "ともだち" } },
-      { id: "demo-2", name: "大学サークルの交換日記", current_holder: { name: "あなた" } },
+      { id: "demo-1", name: "高校の友達との日記", cover_image: null, current_holder: { name: "ともだち" } },
+      { id: "demo-2", name: "大学サークルの交換日記", cover_image: null, current_holder: { name: "あなた" } },
     ];
   } else {
     try {
@@ -99,20 +101,37 @@ export default async function GroupsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 reveal reveal-2">
             {groups.map((group) => (
-              <Link key={group.id} href={`/groups/${group.id}`} className="card p-5 group flex flex-col gap-5 min-h-[150px]">
-                <div className="flex items-start justify-between">
-                  <div className="size-9 rounded-[9px] flex items-center justify-center" style={{ background: "var(--paper-alt)", color: "var(--ink-2)" }}>
-                    <BookOpen className="size-4" strokeWidth={1.5} />
-                  </div>
-                  <span className="opacity-0 group-hover:opacity-100 transition-opacity t-lo">
+              <Link key={group.id} href={`/groups/${group.id}`} className="card group flex flex-col min-h-[210px] overflow-hidden">
+                {/* Cover — image if uploaded, else book icon on paper-alt */}
+                <div
+                  className="relative h-28 w-full overflow-hidden"
+                  style={{ background: "var(--paper-alt)" }}
+                >
+                  {group.cover_image ? (
+                    <Image
+                      src={group.cover_image}
+                      alt=""
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                    />
+                  ) : (
+                    <div
+                      className="absolute inset-0 flex items-center justify-center"
+                      style={{ color: "var(--ink-3)" }}
+                    >
+                      <BookOpen className="size-7" strokeWidth={1.4} />
+                    </div>
+                  )}
+                  <span className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity t-lo">
                     <ArrowRight className="size-4" strokeWidth={1.6} />
                   </span>
                 </div>
-                <div className="mt-auto">
+                <div className="p-5 flex flex-col gap-3 flex-1">
                   <h2 className="text-[15.5px] font-medium tracking-tight t-hi leading-snug line-clamp-2">
                     {group.name}
                   </h2>
-                  <div className="mt-3 flex items-center gap-2">
+                  <div className="mt-auto flex items-center gap-2">
                     <span className="dot dot-signal" />
                     <span className="meta">
                       {group.current_holder?.name ? `${group.current_holder.name} が次に書く` : "バトン未設定"}

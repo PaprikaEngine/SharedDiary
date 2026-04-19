@@ -1,18 +1,46 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
+import imageCompression from "browser-image-compression";
 import { createClient } from "@/lib/supabase/client";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ImagePlus, X } from "lucide-react";
 
 export default function NewGroupPage() {
   const [name, setName] = useState("");
   const [batonDeadlineDays, setBatonDeadlineDays] = useState("3");
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const supabase = createClient();
+
+  const handleCoverSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await imageCompression(file, {
+        maxSizeMB: 2,
+        maxWidthOrHeight: 1920,
+        useWebWorker: true,
+      });
+      setCoverFile(compressed);
+      setCoverPreview(URL.createObjectURL(compressed));
+    } catch {
+      setError("画像の読み込みに失敗しました");
+    }
+  };
+
+  const removeCover = () => {
+    if (coverPreview) URL.revokeObjectURL(coverPreview);
+    setCoverFile(null);
+    setCoverPreview(null);
+    if (coverInputRef.current) coverInputRef.current.value = "";
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,6 +58,19 @@ export default function NewGroupPage() {
       .single();
 
     if (error) { setError(error.message); setLoading(false); return; }
+
+    if (coverFile) {
+      const coverPath = `${data.id}/cover`;
+      const { error: uploadError } = await supabase.storage
+        .from("media")
+        .upload(coverPath, coverFile, { contentType: coverFile.type, upsert: true });
+      if (!uploadError) {
+        const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(coverPath);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("groups").update({ cover_image: publicUrl }).eq("id", data.id);
+      }
+    }
+
     router.push(`/groups/${data.id}`);
     router.refresh();
   };
@@ -78,6 +119,45 @@ export default function NewGroupPage() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-7">
+          {/* Cover image (optional) */}
+          <div>
+            <label className="block text-[13px] font-medium t-hi mb-2">
+              表紙 <span className="t-lo font-normal">(任意)</span>
+            </label>
+            <div
+              onClick={() => coverInputRef.current?.click()}
+              className="relative w-full h-44 rounded-[10px] border border-dashed cursor-pointer overflow-hidden hover:border-[var(--ink-3)] transition-colors"
+              style={{ borderColor: "var(--stroke-strong)", background: "var(--paper-alt)" }}
+            >
+              {coverPreview ? (
+                <>
+                  <Image src={coverPreview} alt="表紙プレビュー" fill className="object-cover" sizes="(max-width: 768px) 100vw, 720px" />
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); removeCover(); }}
+                    className="absolute top-2 right-2 size-7 rounded-full flex items-center justify-center"
+                    style={{ background: "rgba(24,24,22,0.85)", color: "var(--paper)" }}
+                    aria-label="削除"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </>
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2" style={{ color: "var(--ink-3)" }}>
+                  <ImagePlus className="size-5" strokeWidth={1.5} />
+                  <span className="text-[12.5px] t-md">タップして画像を選ぶ</span>
+                </div>
+              )}
+            </div>
+            <input
+              ref={coverInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleCoverSelect}
+              className="hidden"
+            />
+          </div>
+
           <div>
             <label htmlFor="name" className="block text-[13px] font-medium t-hi mb-2">
               日記帳の名前

@@ -10,7 +10,7 @@ type ReactionData = { stamp_id: string; user_id: string; stamp: { id: string; na
 type Props = { entryId: string; groupId: string; reactions: ReactionData[]; currentUserId: string | null };
 type Grouped = { stampId: string; stampName: string; stampUrl: string; thumbnailUrl: string | null; count: number; reactedByMe: boolean };
 
-export function ReactionBar({ entryId, reactions, currentUserId }: Props) {
+export function ReactionBar({ entryId, groupId, reactions, currentUserId }: Props) {
   const [showPicker, setShowPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
@@ -49,7 +49,7 @@ export function ReactionBar({ entryId, reactions, currentUserId }: Props) {
   if (!currentUserId) return null;
 
   return (
-    <div>
+    <div className="relative">
       <div className="flex flex-wrap items-center gap-1.5">
         {grouped.map((g) => (
           <button key={g.stampId} type="button" onClick={() => toggleReaction(g.stampId, g.reactedByMe)} disabled={isSubmitting}
@@ -68,9 +68,19 @@ export function ReactionBar({ entryId, reactions, currentUserId }: Props) {
         </button>
       </div>
       {showPicker && (
-        <div className="mt-3">
-          <StampPicker compact onSelect={addReaction} onClose={() => setShowPicker(false)} />
-        </div>
+        <>
+          {/* Backdrop captures clicks outside the picker so it dismisses */}
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setShowPicker(false)}
+            aria-hidden
+          />
+          {/* Float the picker ABOVE the reaction bar so prev/next nav
+              buttons (rendered in the same row) don't overlap it. */}
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-[min(360px,calc(100vw-2rem))]">
+            <StampPicker compact groupId={groupId} onSelect={addReaction} onClose={() => setShowPicker(false)} />
+          </div>
+        </>
       )}
     </div>
   );

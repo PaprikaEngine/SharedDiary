@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ArrowLeft, Pencil } from "lucide-react";
@@ -23,6 +24,7 @@ export default async function GroupPage({ params }: Props) {
   type Group = {
     id: string;
     name: string;
+    cover_image: string | null;
     current_baton_holder_id: string | null;
     current_holder: { id: string; name: string; avatar_url: string | null } | null;
     baton_deadline_days: number;
@@ -54,6 +56,7 @@ export default async function GroupPage({ params }: Props) {
   let group: Group = {
     id,
     name: "高校の友達との日記",
+    cover_image: null,
     current_baton_holder_id: "1",
     current_holder: { id: "1", name: "あなた", avatar_url: null },
     baton_deadline_days: 3,
@@ -313,6 +316,20 @@ export default async function GroupPage({ params }: Props) {
 
       {/* Diary pages — fill remaining space */}
       <main className="flex-1 flex flex-col max-w-4xl w-full mx-auto px-4 py-4">
+        {/* Cover image — the diary's "front" */}
+        {group.cover_image && (
+          <div className="relative w-full h-44 sm:h-56 rounded-xl overflow-hidden mb-5">
+            <Image
+              src={group.cover_image}
+              alt={`${group.name}の表紙`}
+              fill
+              className="object-cover"
+              sizes="(max-width: 1024px) 100vw, 1024px"
+              priority
+            />
+          </div>
+        )}
+
         <PageViewer
           entries={entries}
           initialIndex={0}
