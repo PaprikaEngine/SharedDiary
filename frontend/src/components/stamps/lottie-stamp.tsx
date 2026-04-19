@@ -30,7 +30,14 @@ export function LottieStamp({
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
 
+  // Some legacy / seeded stamps store an emoji character in `url` instead
+  // of a Lottie JSON path. Detect that early and render as text — passing
+  // the emoji to lottie's loader produces an unrecoverable XHR 400 and
+  // an uncaught InvalidStateError.
+  const isEmoji = !url.startsWith("/") && !url.startsWith("http");
+
   useEffect(() => {
+    if (isEmoji) return;
     const container = containerRef.current;
     if (!container) return;
 
@@ -56,7 +63,25 @@ export function LottieStamp({
       anim?.destroy();
       animRef.current = null;
     };
-  }, [url, loop, autoplay]);
+  }, [url, loop, autoplay, isEmoji]);
+
+  if (isEmoji) {
+    // Render the emoji centered. Use a font-size that scales with the box
+    // so reaction-bar (20×20) and overlay (≥64×64) both look right.
+    return (
+      <div
+        className={`relative inline-flex items-center justify-center ${className}`}
+        style={{ width, height, fontSize: Math.floor(Math.min(width, height) * 0.85), lineHeight: 1 }}
+        onClick={onClick}
+        role={onClick ? "button" : undefined}
+        tabIndex={onClick ? 0 : undefined}
+        onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } : undefined}
+        aria-label="stamp"
+      >
+        <span style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.08))" }}>{url}</span>
+      </div>
+    );
+  }
 
   // All children are absolutely positioned inside the relative parent so
   // that the loading/error overlays can sit ON TOP OF the Lottie container
