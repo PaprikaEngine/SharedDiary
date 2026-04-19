@@ -75,14 +75,11 @@ export function PageViewer({ entries, initialIndex, groupId, groupName, coverIma
   }, []);
   const hasCoverPage = isMobile && !!coverImage;
   const [showingCover, setShowingCover] = useState(false);
-  // When the viewport switches to mobile (or coverImage arrives), default
-  // to showing the cover. Avoid forcing it back open after the user has
-  // navigated away from it on the same viewport.
+  // If the viewport switches off mobile (no cover page anymore), make sure
+  // we're not stuck on a cover state. We never auto-open the cover —
+  // mobile users land on the newest entry just like before.
   useEffect(() => {
-    if (hasCoverPage) setShowingCover(true);
-    else setShowingCover(false);
-    // We intentionally only re-trigger when the cover availability flips;
-    // not on every index change.
+    if (!hasCoverPage) setShowingCover(false);
   }, [hasCoverPage]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
