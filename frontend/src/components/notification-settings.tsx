@@ -4,8 +4,23 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { registerServiceWorker, subscribeToPush, unsubscribeFromPush } from "@/lib/notifications";
 import { Bell, Mail, Loader2 } from "lucide-react";
+import { NOTIFICATIONS_ENABLED } from "@/lib/feature-flags";
 
 export function NotificationSettings() {
+  if (!NOTIFICATIONS_ENABLED) {
+    return (
+      <div className="card p-5">
+        <p className="text-[14px] font-medium t-hi mb-1">通知は準備中です</p>
+        <p className="text-[13px] t-md">
+          メール通知・プッシュ通知は近日公開予定です。
+        </p>
+      </div>
+    );
+  }
+  return <NotificationSettingsImpl />;
+}
+
+function NotificationSettingsImpl() {
   const [emailEnabled, setEmailEnabled] = useState(true);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushSupported, setPushSupported] = useState(false);
@@ -53,18 +68,15 @@ export function NotificationSettings() {
 
   const togglePush = useCallback(async () => {
     if (pushEnabled) {
-      // Unsubscribe
       const reg = await registerServiceWorker();
       if (reg) await unsubscribeFromPush(reg);
       setPushEnabled(false);
       await updatePref("push_enabled", false);
     } else {
-      // Subscribe
       const reg = await registerServiceWorker();
       if (!reg) return;
       const subscription = await subscribeToPush(reg);
-      if (!subscription) return; // Permission denied or error
-      // Send subscription to server
+      if (!subscription) return;
       await fetch("/api/notifications/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

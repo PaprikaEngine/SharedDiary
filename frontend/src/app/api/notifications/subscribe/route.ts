@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { NOTIFICATIONS_ENABLED } from "@/lib/feature-flags";
 
 export async function POST(request: NextRequest) {
+  if (!NOTIFICATIONS_ENABLED) {
+    return NextResponse.json({ ok: true, disabled: true });
+  }
   try {
     const { subscription } = await request.json();
     if (!subscription) {

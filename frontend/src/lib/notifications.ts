@@ -40,10 +40,13 @@ export async function unsubscribeFromPush(
   }
 }
 
+import { NOTIFICATIONS_ENABLED } from "./feature-flags";
+
 export async function triggerBatonNotification(
   groupId: string,
   nextHolderId: string,
 ): Promise<void> {
+  if (!NOTIFICATIONS_ENABLED) return;
   try {
     await fetch("/api/notifications/baton-pass", {
       method: "POST",

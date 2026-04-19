@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
 import { createClient } from "@/lib/supabase/server";
 import { escapeHtml } from "@/lib/resend";
+import { NOTIFICATIONS_ENABLED } from "@/lib/feature-flags";
 
-if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+if (NOTIFICATIONS_ENABLED && process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(
     process.env.VAPID_SUBJECT || "mailto:noreply@example.com",
     process.env.VAPID_PUBLIC_KEY,
@@ -14,6 +15,9 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 // Called by cron/external trigger to send reminders for overdue batons
 // Protected by a simple API key check
 export async function POST(request: NextRequest) {
+  if (!NOTIFICATIONS_ENABLED) {
+    return NextResponse.json({ ok: true, disabled: true });
+  }
   const authHeader = request.headers.get("authorization");
   const apiKey = process.env.CRON_API_KEY;
   if (!apiKey) {

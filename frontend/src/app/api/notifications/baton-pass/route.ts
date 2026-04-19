@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
 import { createClient } from "@/lib/supabase/server";
 import { sendBatonEmail } from "@/lib/resend";
+import { NOTIFICATIONS_ENABLED } from "@/lib/feature-flags";
 
-if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+if (NOTIFICATIONS_ENABLED && process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(
     process.env.VAPID_SUBJECT || "mailto:noreply@example.com",
     process.env.VAPID_PUBLIC_KEY,
@@ -12,6 +13,9 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 }
 
 export async function POST(request: NextRequest) {
+  if (!NOTIFICATIONS_ENABLED) {
+    return NextResponse.json({ ok: true, disabled: true });
+  }
   try {
     const { groupId, nextHolderId } = await request.json();
     if (!groupId || !nextHolderId) {
