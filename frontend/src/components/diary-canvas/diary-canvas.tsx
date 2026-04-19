@@ -11,6 +11,7 @@ import {
 } from "react";
 import { CanvasToolbar, type Tool, type PenColor } from "./canvas-toolbar";
 import { TextBoxOverlay, FONT_OPTIONS, type TextBox, type FontId, type TextAlign } from "./text-box-overlay";
+import { TAPES, TAPE_ALPHA, type TapeId } from "./tape-patterns";
 
 // --- Types ---
 
@@ -31,7 +32,16 @@ type TextElement = {
   fontSize: number;
 };
 
-type CanvasElement = StrokeElement | TextElement;
+type TapeElement = {
+  type: "tape";
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  tapeId: TapeId;
+};
+
+type CanvasElement = StrokeElement | TextElement | TapeElement;
 
 type Props = {
   width?: number;
@@ -216,10 +226,43 @@ function drawText(ctx: CanvasRenderingContext2D, el: TextElement) {
   ctx.restore();
 }
 
+function drawTape(ctx: CanvasRenderingContext2D, el: TapeElement) {
+  const tape = TAPES[el.tapeId];
+  if (!tape || !tape.tile) return;
+  const dx = el.x2 - el.x1;
+  const dy = el.y2 - el.y1;
+  const length = Math.hypot(dx, dy);
+  if (length < 1) return;
+  const angle = Math.atan2(dy, dx);
+  const w = tape.width;
+
+  ctx.save();
+  ctx.translate(el.x1, el.y1);
+  ctx.rotate(angle);
+  ctx.translate(0, -w / 2);
+
+  // Pattern-fill the tape body
+  const pattern = ctx.createPattern(tape.tile, "repeat");
+  if (pattern) {
+    ctx.globalAlpha = TAPE_ALPHA;
+    ctx.fillStyle = pattern;
+    ctx.fillRect(0, 0, length, w);
+  }
+
+  // Soft edge shadows so the tape looks "stuck on" the page
+  ctx.globalAlpha = 0.18;
+  ctx.fillStyle = "rgba(0,0,0,1)";
+  ctx.fillRect(0, 0, length, 1);
+  ctx.fillRect(0, w - 1, length, 1);
+
+  ctx.restore();
+}
+
 function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement) {
   if (!el) return;
   if (el.type === "stroke") drawStroke(ctx, el);
-  else drawText(ctx, el);
+  else if (el.type === "text") drawText(ctx, el);
+  else if (el.type === "tape") drawTape(ctx, el);
 }
 
 // --- Exported types ---
@@ -244,6 +287,7 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
     const [fontSizeIndex, setFontSizeIndex] = useState(1);
     const [fontFamily, setFontFamily] = useState<FontId>("serif");
     const [textAlign, setTextAlign] = useState<TextAlign>("left");
+    const [tapeId, setTapeId] = useState<TapeId>("check-rose");
     const [background, setBackground] = useState<BackgroundType>("ruled");
 
     const [history, dispatch] = useReducer(historyReducer, {
@@ -258,6 +302,7 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
 
     const [isDrawing, setIsDrawing] = useState(false);
     const currentStrokeRef = useRef<StrokeElement | null>(null);
+    const currentTapeRef = useRef<TapeElement | null>(null);
 
     // Text boxes (managed as objects, not baked into canvas)
     const [textBoxes, setTextBoxes] = useState<TextBox[]>([]);
@@ -313,6 +358,20 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
       // Text tool is handled by TextBoxOverlay
       if (tool === "text") return;
 
+      if (tool === "tape") {
+        e.preventDefault();
+        drawCanvasRef.current?.setPointerCapture(e.pointerId);
+        setIsDrawing(true);
+        const pt = getPoint(e);
+        currentTapeRef.current = {
+          type: "tape",
+          x1: pt.x, y1: pt.y,
+          x2: pt.x, y2: pt.y,
+          tapeId,
+        };
+        return;
+      }
+
       if (tool !== "pen" && tool !== "eraser") return;
       e.preventDefault();
       drawCanvasRef.current?.setPointerCapture(e.pointerId);
@@ -328,7 +387,22 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
     };
 
     const handlePointerMove = (e: React.PointerEvent) => {
-      if (!isDrawing || !currentStrokeRef.current) return;
+      if (!isDrawing) return;
+
+      if (currentTapeRef.current) {
+        e.preventDefault();
+        const pt = getPoint(e);
+        currentTapeRef.current.x2 = pt.x;
+        currentTapeRef.current.y2 = pt.y;
+        const ctx = drawCanvasRef.current?.getContext("2d");
+        if (!ctx) return;
+        ctx.clearRect(0, 0, width, height);
+        for (const el of elementsRef.current) drawElement(ctx, el);
+        drawTape(ctx, currentTapeRef.current);
+        return;
+      }
+
+      if (!currentStrokeRef.current) return;
       e.preventDefault();
       currentStrokeRef.current.points.push(getPoint(e));
 
@@ -340,7 +414,21 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
     };
 
     const handlePointerUp = (e: React.PointerEvent) => {
-      if (!isDrawing || !currentStrokeRef.current) return;
+      if (!isDrawing) return;
+
+      if (currentTapeRef.current) {
+        e.preventDefault();
+        setIsDrawing(false);
+        const finished = currentTapeRef.current;
+        currentTapeRef.current = null;
+        // Only commit if the user actually dragged — a tap shouldn't
+        // create a zero-length tape.
+        const len = Math.hypot(finished.x2 - finished.x1, finished.y2 - finished.y1);
+        if (len >= 8) dispatch({ type: "push", element: finished });
+        return;
+      }
+
+      if (!currentStrokeRef.current) return;
       e.preventDefault();
       setIsDrawing(false);
       const finished = currentStrokeRef.current;
@@ -479,6 +567,8 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
           onFontFamilyChange={setFontFamily}
           textAlign={textAlign}
           onTextAlignChange={setTextAlign}
+          tapeId={tapeId}
+          onTapeIdChange={setTapeId}
           background={background}
           onBackgroundChange={setBackground}
           canUndo={history.elements.length > 0}
