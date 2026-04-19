@@ -88,8 +88,17 @@ export default function NewEntryPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<DiaryCanvasHandle>(null);
+  const canvasWrapperRef = useRef<HTMLDivElement>(null);
+  const stampPickerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const supabase = createClient();
+
+  // On mobile the picker renders below the (tall A4) canvas and is
+  // easy to miss. Auto-scroll it into view whenever it opens.
+  useEffect(() => {
+    if (!showStampPicker) return;
+    stampPickerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [showStampPicker]);
 
   useEffect(() => {
     let mounted = true;
@@ -315,7 +324,7 @@ export default function NewEntryPage() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Canvas */}
-          <div className="relative">
+          <div ref={canvasWrapperRef} className="relative scroll-mt-20">
             <DiaryCanvas
               ref={canvasRef} width={DIARY_CANVAS_WIDTH} height={DIARY_CANVAS_HEIGHT}
               onScaleChange={setCanvasScale}
@@ -360,11 +369,38 @@ export default function NewEntryPage() {
               }
             />
             {showStampPicker && (
-              <div className="mt-3">
-                <StampPicker groupId={groupId} onSelect={(stamp) => {
-                  if (placedStamps.length >= MAX_STAMPS) return;
-                  setPlacedStamps((p) => [...p, { instanceId: crypto.randomUUID(), stampId: stamp.id, url: stamp.url, x: CANVAS_CENTER_X, y: CANVAS_CENTER_Y, scale: 1, rotation: 0 }]);
-                }} onClose={() => setShowStampPicker(false)} />
+              <div ref={stampPickerRef} className="mt-3 scroll-mt-20">
+                <StampPicker
+                  groupId={groupId}
+                  onSelect={(stamp) => {
+                    if (placedStamps.length >= MAX_STAMPS) return;
+                    setPlacedStamps((p) => [
+                      ...p,
+                      {
+                        instanceId: crypto.randomUUID(),
+                        stampId: stamp.id,
+                        url: stamp.url,
+                        x: CANVAS_CENTER_X,
+                        y: CANVAS_CENTER_Y,
+                        scale: 1,
+                        rotation: 0,
+                      },
+                    ]);
+                    // Close + scroll back to the canvas so the user
+                    // immediately sees the newly placed stamp. On the
+                    // tall mobile A4 layout the picker sits well below
+                    // the canvas, so without this the new stamp lands
+                    // off-screen and the user can't tell it worked.
+                    setShowStampPicker(false);
+                    requestAnimationFrame(() => {
+                      canvasWrapperRef.current?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "center",
+                      });
+                    });
+                  }}
+                  onClose={() => setShowStampPicker(false)}
+                />
               </div>
             )}
           </div>
