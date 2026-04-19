@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 export default function UpdatePasswordPage() {
@@ -43,24 +44,27 @@ export default function UpdatePasswordPage() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen px-6">
-      <div className="w-full max-w-sm">
-        <h1 className="text-3xl font-bold text-moss text-center mb-2">
-          新しいパスワードを設定
-        </h1>
-        <p className="text-ink-light text-center mb-8">
-          新しいパスワードを入力してください
-        </p>
+    <div className="flex-1 flex flex-col items-center justify-center px-6 py-16">
+      <div className="w-full max-w-[380px] reveal reveal-1">
+        <Link href="/" className="flex items-center gap-2.5 mb-8">
+          <div className="w-6 h-6 rounded-[7px] flex items-center justify-center" style={{ background: "var(--ink)" }}>
+            <div className="w-2.5 h-2.5 rounded-[3px]" style={{ background: "var(--signal)" }} />
+          </div>
+          <span className="font-medium text-[13.5px] tracking-tight">SharedDiary</span>
+        </Link>
+
+        <h1 className="text-[24px] font-medium tracking-[-0.02em] t-hi mb-1.5">新しいパスワード</h1>
+        <p className="text-[13.5px] t-md mb-8">新しいパスワードを設定してください。</p>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+          <div className="mb-5 text-[13px] px-3.5 py-2.5 rounded-[8px] border" style={{ borderColor: "var(--danger)", color: "var(--danger)", background: "var(--danger-soft)" }}>
             {error}
           </div>
         )}
 
         <form onSubmit={handleUpdate} className="space-y-4">
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-ink mb-1">
+            <label htmlFor="password" className="block text-[12.5px] font-medium t-hi mb-1.5">
               新しいパスワード
             </label>
             <input
@@ -70,14 +74,14 @@ export default function UpdatePasswordPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
-              className="w-full px-4 py-3 border border-cream-dark rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-moss focus:border-transparent"
               placeholder="6文字以上"
+              className="field"
             />
           </div>
 
           <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-ink mb-1">
-              パスワード（確認）
+            <label htmlFor="confirmPassword" className="block text-[12.5px] font-medium t-hi mb-1.5">
+              確認
             </label>
             <input
               id="confirmPassword"
@@ -86,16 +90,12 @@ export default function UpdatePasswordPage() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               minLength={6}
-              className="w-full px-4 py-3 border border-cream-dark rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-moss focus:border-transparent"
               placeholder="もう一度入力"
+              className="field"
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-moss text-cream px-6 py-3 rounded-lg font-medium hover:bg-moss-dark transition-colors disabled:opacity-50"
-          >
+          <button type="submit" disabled={loading} className="btn btn-primary btn-lg btn-block mt-2">
             {loading ? "更新中..." : "パスワードを更新"}
           </button>
         </form>

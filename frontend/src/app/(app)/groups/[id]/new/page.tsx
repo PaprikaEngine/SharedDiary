@@ -218,55 +218,76 @@ export default function NewEntryPage() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-cream-dark bg-cream/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
-          <Link
-            href={`/groups/${groupId}`}
-            className="text-ink-light hover:text-ink"
-          >
-            &larr; 戻る
-          </Link>
-          <h1 className="text-2xl font-bold text-moss">日記を書く</h1>
+      <header className="sticky top-0 z-10 border-b rule-hair" style={{ background: "color-mix(in srgb, var(--surface) 92%, transparent)", backdropFilter: "blur(8px)" }}>
+        <div className="max-w-5xl mx-auto px-6 md:px-10 h-14 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <Link href={`/groups/${groupId}`} className="btn btn-flat btn-sm">
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
+                <path d="M11 7H3M3 7L6.5 3.5M3 7L6.5 10.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              戻る
+            </Link>
+            <span className="t-xlo">/</span>
+            <span className="meta">New entry</span>
+          </div>
+          <button type="submit" form="new-entry-form" disabled={loading} className="btn btn-primary btn-sm">
+            {loading ? "投稿中..." : "投稿してバトンを渡す"}
+          </button>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-8">
+      <main className="max-w-5xl mx-auto px-6 md:px-10 py-10 reveal reveal-1">
+        <div className="mb-8">
+          <h1 className="text-[28px] font-medium tracking-[-0.02em] t-hi leading-tight">日記を書く</h1>
+          <p className="mt-1.5 text-[13.5px] t-md">書き終えたら、次に渡す人を選びます。</p>
+        </div>
+
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+          <div className="mb-6 text-[13px] px-3.5 py-2.5 rounded-[8px] border" style={{ borderColor: "var(--danger)", color: "var(--danger)", background: "var(--danger-soft)" }}>
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form id="new-entry-form" onSubmit={handleSubmit} className="space-y-8">
           {/* Canvas Editor */}
-          <DiaryCanvas ref={canvasRef} width={800} height={600} />
+          <section className="card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <span className="chip chip-ink">1</span>
+                <span className="text-[14px] font-medium t-hi">キャンバス</span>
+              </div>
+              <span className="meta-sm">ペン・消しゴム・テキスト</span>
+            </div>
+            <DiaryCanvas ref={canvasRef} width={800} height={600} />
+          </section>
 
           {/* Photo Attachments */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <label className="text-sm font-medium text-ink">
-                写真を添付
-              </label>
-              <span className="text-sm text-ink-light">
-                {images.length}/10
-              </span>
+          <section className="card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <span className="chip chip-ink">2</span>
+                <span className="text-[14px] font-medium t-hi">写真</span>
+              </div>
+              <span className="meta-sm">{images.length} / 10</span>
             </div>
 
             <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
               {images.map((img) => (
-                <div key={img.id} className="relative aspect-square">
+                <div key={img.id} className="relative aspect-square rounded-[10px] overflow-hidden border" style={{ borderColor: "var(--stroke)" }}>
                   <Image
                     src={img.preview}
                     alt="Preview"
                     fill
-                    className="object-cover rounded-lg"
+                    className="object-cover"
                   />
                   <button
                     type="button"
                     onClick={() => removeImage(img.id)}
-                    className="absolute -top-2 -right-2 w-6 h-6 bg-ink text-cream rounded-full text-sm flex items-center justify-center hover:bg-ink-light"
+                    className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center text-[12px]"
+                    style={{ background: "rgba(24,24,22,0.85)", color: "var(--paper)" }}
+                    aria-label="Remove"
                   >
-                    &times;
+                    ×
                   </button>
                 </div>
               ))}
@@ -275,10 +296,13 @@ export default function NewEntryPage() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="aspect-square border-2 border-dashed border-cream-dark rounded-lg flex flex-col items-center justify-center hover:border-moss transition-colors"
+                  className="aspect-square rounded-[10px] flex flex-col items-center justify-center gap-1.5 transition-all"
+                  style={{ background: "var(--paper-alt)", border: "1px dashed var(--stroke-strong)", color: "var(--ink-2)" }}
                 >
-                  <span className="text-2xl text-ink-light">+</span>
-                  <span className="text-xs text-ink-light">写真</span>
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                    <path d="M9 3V15M3 9H15" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                  </svg>
+                  <span className="text-[11px] t-md font-medium">写真を追加</span>
                 </button>
               )}
             </div>
@@ -291,42 +315,47 @@ export default function NewEntryPage() {
               onChange={handleImageSelect}
               className="hidden"
             />
-          </div>
+          </section>
 
           {/* Baton Selection */}
-          <div className="bg-white border border-cream-dark rounded-xl p-4">
-            <label className="block text-sm font-medium text-ink mb-3">
-              次にバトンを渡す人
-            </label>
+          <section className="card p-5">
+            <div className="flex items-center gap-2.5 mb-4">
+              <span className="chip chip-ink">3</span>
+              <span className="text-[14px] font-medium t-hi">次にバトンを渡す人</span>
+            </div>
+
             {membersLoaded ? (
               <div className="flex flex-wrap gap-2">
-                {members.map((member) => (
-                  <button
-                    key={member.id}
-                    type="button"
-                    onClick={() => setNextBatonHolder(member.id)}
-                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                      nextBatonHolder === member.id
-                        ? "bg-moss text-cream"
-                        : "bg-cream-dark text-ink hover:bg-moss/20"
-                    }`}
-                  >
-                    {member.name}
-                  </button>
-                ))}
+                {members.map((member) => {
+                  const active = nextBatonHolder === member.id;
+                  return (
+                    <button
+                      key={member.id}
+                      type="button"
+                      onClick={() => setNextBatonHolder(member.id)}
+                      className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full border transition-all"
+                      style={
+                        active
+                          ? { background: "var(--ink)", borderColor: "var(--ink)", color: "var(--paper)" }
+                          : { background: "var(--paper)", borderColor: "var(--stroke)", color: "var(--ink)" }
+                      }
+                    >
+                      <span className="avatar" style={active ? { background: "var(--paper)", color: "var(--ink)", borderColor: "transparent" } : undefined}>
+                        {member.name.charAt(0)}
+                      </span>
+                      <span className="text-[13px] font-medium">{member.name}</span>
+                    </button>
+                  );
+                })}
               </div>
             ) : (
-              <p className="text-sm text-ink-light">読み込み中...</p>
+              <p className="text-[13px] t-md">読み込み中...</p>
             )}
-          </div>
+          </section>
 
-          {/* Submit */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-moss text-cream px-6 py-4 rounded-xl font-medium text-lg hover:bg-moss-dark transition-colors disabled:opacity-50"
-          >
-            {loading ? "投稿中..." : "日記を投稿してバトンを渡す"}
+          {/* Footer action for mobile / tall viewports */}
+          <button type="submit" disabled={loading} className="btn btn-primary btn-lg btn-block">
+            {loading ? "投稿中..." : "投稿してバトンを渡す"}
           </button>
         </form>
       </main>

@@ -48,13 +48,9 @@ export function JoinGroupButton({ groupId }: Props) {
   return (
     <div>
       {error && (
-        <p className="text-red-600 text-sm mb-4">{error}</p>
+        <p className="text-[13px] mb-4" style={{ color: "var(--danger)" }}>{error}</p>
       )}
-      <button
-        onClick={handleJoin}
-        disabled={loading}
-        className="w-full bg-moss text-cream px-6 py-3 rounded-lg font-medium hover:bg-moss-dark transition-colors disabled:opacity-50"
-      >
+      <button onClick={handleJoin} disabled={loading} className="btn btn-primary btn-lg btn-block">
         {loading ? "参加中..." : "日記帳に参加する"}
       </button>
     </div>

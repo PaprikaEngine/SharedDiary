@@ -54,44 +54,53 @@ export function InviteButton({ groupId }: Props) {
 
   return (
     <>
-      <button
-        onClick={generateInvite}
-        disabled={loading}
-        className="border border-moss text-moss px-4 py-2 rounded-lg text-sm font-medium hover:bg-moss hover:text-cream transition-colors disabled:opacity-50"
-      >
-        {loading ? "生成中..." : "招待リンク"}
+      <button onClick={generateInvite} disabled={loading} className="btn btn-ghost btn-sm">
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
+          <path d="M7 1V13M1 7H13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        </svg>
+        {loading ? "生成中..." : "招待"}
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 bg-ink/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-cream rounded-xl p-6 max-w-md w-full">
-            <h2 className="text-xl font-bold text-moss mb-2">招待リンク</h2>
-            <p className="text-sm text-ink-light mb-4">
-              このリンクを友達に送って、日記帳に招待しましょう
-            </p>
-
-            <div className="bg-white border border-cream-dark rounded-lg p-3 mb-4">
-              <p className="text-sm text-ink break-all">{inviteUrl}</p>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={copyToClipboard}
-                className="flex-1 bg-moss text-cream px-4 py-2 rounded-lg font-medium hover:bg-moss-dark transition-colors"
-              >
-                {copied ? "コピーしました!" : "コピー"}
-              </button>
+        <div
+          className="fixed inset-0 flex items-center justify-center z-50 p-4 animate-fadeIn"
+          style={{ background: "rgba(24,24,22,0.4)", backdropFilter: "blur(4px)" }}
+          onClick={() => setIsOpen(false)}
+        >
+          <div
+            className="card w-full max-w-[420px] p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 className="text-[17px] font-medium tracking-tight t-hi">招待リンク</h2>
+                <p className="text-[13px] t-md mt-0.5">リンクを送って、仲間を招きましょう。</p>
+              </div>
               <button
                 onClick={() => setIsOpen(false)}
-                className="flex-1 border border-ink-light text-ink px-4 py-2 rounded-lg font-medium hover:bg-cream-dark transition-colors"
+                className="t-lo hover:t-hi"
+                aria-label="Close"
               >
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                  <path d="M4 4L14 14M14 4L4 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="rounded-[9px] p-3 mb-4 border" style={{ background: "var(--paper-alt)", borderColor: "var(--stroke)" }}>
+              <p className="font-mono text-[12px] break-all t-hi leading-relaxed">{inviteUrl}</p>
+            </div>
+
+            <div className="flex gap-2">
+              <button onClick={copyToClipboard} className="btn btn-primary flex-1">
+                {copied ? "コピーしました" : "リンクをコピー"}
+              </button>
+              <button onClick={() => setIsOpen(false)} className="btn btn-ghost">
                 閉じる
               </button>
             </div>
 
-            <p className="text-xs text-ink-light text-center mt-4">
-              このリンクは7日間有効です
-            </p>
+            <p className="meta-sm text-center mt-4">7日間有効</p>
           </div>
         </div>
       )}

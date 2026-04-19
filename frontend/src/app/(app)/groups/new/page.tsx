@@ -46,77 +46,94 @@ export default function NewGroupPage() {
     router.refresh();
   };
 
+  const options = [
+    { v: 1, l: "1日" },
+    { v: 3, l: "3日" },
+    { v: 7, l: "1週間" },
+    { v: 14, l: "2週間" },
+    { v: 30, l: "1ヶ月" },
+  ];
+
   return (
     <div className="min-h-screen">
-      <header className="border-b border-cream-dark bg-cream/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
-          <Link href="/groups" className="text-ink-light hover:text-ink">
-            ← 戻る
+      <header className="sticky top-0 z-10 border-b rule-hair" style={{ background: "color-mix(in srgb, var(--surface) 92%, transparent)", backdropFilter: "blur(8px)" }}>
+        <div className="max-w-3xl mx-auto px-6 md:px-10 h-14 flex items-center justify-between">
+          <Link href="/groups" className="btn btn-flat btn-sm">
+            <ArrowLeft />
+            Library
           </Link>
-          <h1 className="text-2xl font-bold text-moss">新しい日記帳</h1>
+          <span className="meta">New diary</span>
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-6 py-8">
-        <div className="bg-white border border-cream-dark rounded-xl p-6">
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
-              {error}
-            </div>
-          )}
+      <main className="max-w-xl mx-auto px-6 md:px-10 py-12 reveal reveal-1">
+        <h1 className="text-[28px] font-medium tracking-[-0.02em] t-hi mb-1.5">新しい日記帳</h1>
+        <p className="text-[13.5px] t-md mb-9">名前を決めるだけ。仲間は後から招待できます。</p>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-ink mb-2">
-                日記帳の名前
-              </label>
-              <input
-                id="name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                maxLength={50}
-                className="w-full px-4 py-3 border border-cream-dark rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-moss focus:border-transparent"
-                placeholder="例: 高校の友達との日記"
-              />
-            </div>
+        {error && (
+          <div className="mb-6 text-[13px] px-3.5 py-2.5 rounded-[8px] border" style={{ borderColor: "var(--danger)", color: "var(--danger)", background: "var(--danger-soft)" }}>
+            {error}
+          </div>
+        )}
 
-            <div>
-              <label htmlFor="deadline" className="block text-sm font-medium text-ink mb-2">
-                バトンの期限（日数）
-              </label>
-              <p className="text-sm text-ink-light mb-2">
-                バトンを持っている人が書く期限です
-              </p>
-              <select
-                id="deadline"
-                value={batonDeadlineDays}
-                onChange={(e) => setBatonDeadlineDays(Number(e.target.value))}
-                className="w-full px-4 py-3 border border-cream-dark rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-moss focus:border-transparent"
-              >
-                <option value={1}>1日</option>
-                <option value={3}>3日</option>
-                <option value={7}>1週間</option>
-                <option value={14}>2週間</option>
-                <option value={30}>1ヶ月</option>
-              </select>
-            </div>
+        <form onSubmit={handleSubmit} className="space-y-7">
+          <div>
+            <label htmlFor="name" className="block text-[13px] font-medium t-hi mb-2">
+              日記帳の名前
+            </label>
+            <input
+              id="name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              maxLength={50}
+              placeholder="例: 高校の友達との日記"
+              className="field field-lg"
+              autoFocus
+            />
+          </div>
 
-            <button
-              type="submit"
-              disabled={loading || !name.trim()}
-              className="w-full bg-moss text-cream px-6 py-3 rounded-lg font-medium hover:bg-moss-dark transition-colors disabled:opacity-50"
-            >
+          <div>
+            <label className="block text-[13px] font-medium t-hi mb-2">
+              バトンの期限
+            </label>
+            <div className="seg w-full">
+              {options.map((opt) => (
+                <button
+                  key={opt.v}
+                  type="button"
+                  onClick={() => setBatonDeadlineDays(opt.v)}
+                  data-active={batonDeadlineDays === opt.v}
+                  className="flex-1"
+                >
+                  {opt.l}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[12px] t-lo">
+              バトンを受けた人が書くまでの期限です。
+            </p>
+          </div>
+
+          <div className="pt-2 flex items-center gap-3">
+            <button type="submit" disabled={loading || !name.trim()} className="btn btn-primary btn-lg">
               {loading ? "作成中..." : "日記帳を作成"}
             </button>
-          </form>
-        </div>
-
-        <p className="text-center text-sm text-ink-light mt-6">
-          作成後、招待リンクで友達を招待できます
-        </p>
+            <Link href="/groups" className="btn btn-flat btn-lg">
+              キャンセル
+            </Link>
+          </div>
+        </form>
       </main>
     </div>
+  );
+}
+
+function ArrowLeft() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <path d="M11 7H3M3 7L6.5 3.5M3 7L6.5 10.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

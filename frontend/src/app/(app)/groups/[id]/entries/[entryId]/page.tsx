@@ -26,7 +26,7 @@ export default async function EntryPage({ params }: Props) {
     id: entryId,
     group_id: groupId,
     author_id: "demo",
-    body: "今日はいい天気だったね！公園でアイスを食べたよ🍦\n\nまた明日も遊ぼうね。",
+    body: "今日はいい天気だったね。公園でアイスを食べたよ。\n\nまた明日も遊ぼうね。",
     created_at: new Date().toISOString(),
     author: { id: "demo", name: "ともだち", avatar_url: null },
     media: null,
@@ -102,52 +102,57 @@ export default async function EntryPage({ params }: Props) {
   }
 
   const sortedMedia = entry.media?.sort((a, b) => a.order - b.order) ?? [];
+  const date = new Date(entry.created_at);
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-cream-dark bg-cream/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
-          <Link href={`/groups/${groupId}`} className="text-ink-light hover:text-ink">
-            ← タイムライン
+      <header className="sticky top-0 z-10 border-b rule-hair" style={{ background: "color-mix(in srgb, var(--surface) 92%, transparent)", backdropFilter: "blur(8px)" }}>
+        <div className="max-w-3xl mx-auto px-6 md:px-10 h-14 flex items-center justify-between">
+          <Link href={`/groups/${groupId}`} className="btn btn-flat btn-sm">
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
+              <path d="M11 7H3M3 7L6.5 3.5M3 7L6.5 10.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            戻る
           </Link>
+          <span className="meta">Entry</span>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-6 py-8">
-        {/* Entry Header */}
-        <div className="flex items-center gap-4 mb-6">
-          <div className="w-14 h-14 bg-moss-light rounded-full flex items-center justify-center text-cream text-xl font-medium">
+      <article className="max-w-2xl mx-auto px-6 md:px-10 py-12 reveal reveal-1">
+        {/* Meta row */}
+        <div className="flex items-center gap-3 mb-7">
+          <div className="avatar avatar-lg">
             {entry.author?.name?.charAt(0) ?? "?"}
           </div>
-          <div>
-            <p className="text-lg font-medium text-ink">{entry.author?.name}</p>
-            <p className="text-sm text-ink-light">
-              {new Date(entry.created_at).toLocaleDateString("ja-JP", {
+          <div className="flex-1 min-w-0">
+            <p className="text-[14.5px] font-medium t-hi">{entry.author?.name}</p>
+            <p className="meta-sm mt-0.5">
+              {date.toLocaleDateString("ja-JP", {
                 year: "numeric",
                 month: "long",
                 day: "numeric",
-                weekday: "long",
+                weekday: "short",
               })}
             </p>
           </div>
         </div>
 
-        {/* Entry Content */}
-        <div className="bg-white border border-cream-dark rounded-xl p-6 mb-6">
+        {/* Body */}
+        <div className="mb-8">
           {entry.body ? (
-            <p className="text-ink whitespace-pre-wrap leading-relaxed">
+            <p className="text-[16px] leading-[1.85] whitespace-pre-wrap t-hi">
               {entry.body}
             </p>
           ) : (
-            <p className="text-ink-light italic">テキストなし</p>
+            <p className="text-[13px] italic t-lo text-center py-6">本文はキャンバスにあります</p>
           )}
         </div>
 
-        {/* Media Gallery */}
+        {/* Media */}
         {sortedMedia.length > 0 && (
-          <div className="mb-8">
+          <div className="mb-10">
             <div
-              className={`grid gap-3 ${
+              className={`grid gap-2.5 ${
                 sortedMedia.length === 1
                   ? "grid-cols-1"
                   : sortedMedia.length === 2
@@ -158,7 +163,8 @@ export default async function EntryPage({ params }: Props) {
               {sortedMedia.map((media) => (
                 <div
                   key={media.id}
-                  className="relative aspect-square rounded-xl overflow-hidden bg-cream-dark"
+                  className="relative aspect-square overflow-hidden rounded-[10px] border"
+                  style={{ borderColor: "var(--stroke)", background: "var(--paper-alt)" }}
                 >
                   <Image
                     src={media.url}
@@ -173,30 +179,30 @@ export default async function EntryPage({ params }: Props) {
         )}
 
         {/* Navigation */}
-        <div className="flex items-center justify-between pt-6 border-t border-cream-dark">
+        <nav className="flex items-center justify-between pt-6 border-t rule-hair">
           {prevEntry ? (
-            <Link
-              href={`/groups/${groupId}/entries/${prevEntry.id}`}
-              className="text-moss hover:underline"
-            >
-              ← 前の日記
+            <Link href={`/groups/${groupId}/entries/${prevEntry.id}`} className="btn btn-ghost btn-sm">
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
+                <path d="M11 7H3M3 7L6.5 3.5M3 7L6.5 10.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              前の日記
             </Link>
           ) : (
-            <span className="text-ink-light">最初の日記</span>
+            <span className="meta-sm">最初の日記</span>
           )}
 
           {nextEntry ? (
-            <Link
-              href={`/groups/${groupId}/entries/${nextEntry.id}`}
-              className="text-moss hover:underline"
-            >
-              次の日記 →
+            <Link href={`/groups/${groupId}/entries/${nextEntry.id}`} className="btn btn-ghost btn-sm">
+              次の日記
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
+                <path d="M3 7H11M11 7L7.5 3.5M11 7L7.5 10.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </Link>
           ) : (
-            <span className="text-ink-light">最新の日記</span>
+            <span className="meta-sm">最新の日記</span>
           )}
-        </div>
-      </main>
+        </nav>
+      </article>
     </div>
   );
 }
