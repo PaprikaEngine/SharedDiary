@@ -316,15 +316,17 @@ export default async function GroupPage({ params }: Props) {
 
       {/* Diary pages — fill remaining space */}
       <main className="flex-1 flex flex-col max-w-4xl w-full mx-auto px-4 py-4">
-        {/* Cover image — the diary's "front" */}
+        {/* Cover image — desktop only.
+            On mobile the cover is rendered inside PageViewer as the
+            first page (see `coverImage` + `coverIsFirstPage` props). */}
         {group.cover_image && (
-          <div className="relative w-full h-44 sm:h-56 rounded-xl overflow-hidden mb-5">
+          <div className="relative w-full h-56 rounded-xl overflow-hidden mb-5 hidden md:block">
             <Image
               src={group.cover_image}
               alt={`${group.name}の表紙`}
               fill
               className="object-cover"
-              sizes="(max-width: 1024px) 100vw, 1024px"
+              sizes="1024px"
               priority
             />
           </div>
@@ -334,6 +336,8 @@ export default async function GroupPage({ params }: Props) {
           entries={entries}
           initialIndex={0}
           groupId={id}
+          groupName={group.name}
+          coverImage={group.cover_image}
           currentUserId={currentUserId}
           hasBaton={hasBaton}
           isOwner={isOwner}

@@ -48,16 +48,42 @@ type Props = {
   entries: EntryData[];
   initialIndex: number;
   groupId: string;
+  groupName?: string;
+  /** Cover image URL. On mobile, shown as the first page. */
+  coverImage?: string | null;
   currentUserId: string | null;
   hasBaton: boolean;
   isOwner: boolean;
   totalCount: number;
 };
 
-export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasBaton, isOwner, totalCount }: Props) {
+export function PageViewer({ entries, initialIndex, groupId, groupName, coverImage, currentUserId, hasBaton, isOwner, totalCount }: Props) {
   const router = useRouter();
   const [index, setIndex] = useState(initialIndex);
   const [direction, setDirection] = useState<"left" | "right" | null>(null);
+
+  // Mobile-only cover: when a cover image exists, show it as the very
+  // first page on small screens. Desktop renders the cover as a hero
+  // banner above the viewer instead.
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  const hasCoverPage = isMobile && !!coverImage;
+  const [showingCover, setShowingCover] = useState(false);
+  // When the viewport switches to mobile (or coverImage arrives), default
+  // to showing the cover. Avoid forcing it back open after the user has
+  // navigated away from it on the same viewport.
+  useEffect(() => {
+    if (hasCoverPage) setShowingCover(true);
+    else setShowingCover(false);
+    // We intentionally only re-trigger when the cover availability flips;
+    // not on every index change.
+  }, [hasCoverPage]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -129,6 +155,28 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
   }, [hasCanvasBox, entryCanvasWidth]);
 
   const flip = useCallback((dir: "prev" | "next") => {
+    // Cover-page transitions on mobile: the cover sits "before" index 0
+    // (newest entry). Flipping prev from the newest entry brings the
+    // cover back; flipping next from the cover advances to newest.
+    if (showingCover) {
+      if (dir === "next" && entries.length > 0) {
+        setDirection("left");
+        setTimeout(() => {
+          setShowingCover(false);
+          setIndex(0);
+          setDirection(null);
+        }, 150);
+      }
+      return;
+    }
+    if (hasCoverPage && dir === "prev" && index === 0) {
+      setDirection("right");
+      setTimeout(() => {
+        setShowingCover(true);
+        setDirection(null);
+      }, 150);
+      return;
+    }
     const newIndex = dir === "prev" ? index + 1 : index - 1;
     if (newIndex < 0 || newIndex >= entries.length) return;
     setDirection(dir === "prev" ? "right" : "left");
@@ -137,7 +185,7 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
       setIndex(newIndex);
       setDirection(null);
     }, 150);
-  }, [index, entries.length]);
+  }, [index, entries.length, showingCover, hasCoverPage]);
 
   const canDelete =
     !!entry &&
@@ -193,11 +241,73 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
     if (touchStartX === null) return;
     const dx = e.changedTouches[0].clientX - touchStartX;
     if (Math.abs(dx) > 60) {
-      if (dx > 0 && index < entries.length - 1) flip("prev");
-      else if (dx < 0 && index > 0) flip("next");
+      if (dx > 0) {
+        // Swipe right → previous (older, or back to cover)
+        if (showingCover) {
+          // already at cover
+        } else if (index < entries.length - 1 || (hasCoverPage && index === 0)) {
+          flip("prev");
+        }
+      } else {
+        // Swipe left → next (newer, or out of cover)
+        if (showingCover) flip("next");
+        else if (index > 0) flip("next");
+      }
     }
     setTouchStartX(null);
   };
+
+  // Cover page (mobile only) — rendered as a full-bleed first page.
+  // Falls through to the normal entry view once the user advances.
+  if (showingCover && coverImage) {
+    return (
+      <div
+        className="flex-1 flex flex-col"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        <article
+          className={`paper-plain rounded-xl page-shadow relative overflow-hidden transition-all duration-150 ${
+            direction === "left" ? "translate-x-[-8px] opacity-80" :
+            direction === "right" ? "translate-x-[8px] opacity-80" : ""
+          }`}
+          style={{ aspectRatio: "3 / 4" }}
+        >
+          <Image
+            src={coverImage}
+            alt={`${groupName ?? ""}の表紙`}
+            fill
+            className="object-cover"
+            sizes="100vw"
+            priority
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/0 to-black/0" aria-hidden />
+          {groupName && (
+            <div className="absolute inset-x-0 bottom-0 p-5 text-white">
+              <p className="meta-sm" style={{ color: "rgba(255,255,255,0.7)" }}>表紙</p>
+              <h2 className="text-[22px] font-medium tracking-tight mt-1 leading-tight drop-shadow">
+                {groupName}
+              </h2>
+            </div>
+          )}
+        </article>
+
+        {/* Nav — only "next" is meaningful from the cover */}
+        <div className="flex items-center justify-between mt-3 px-1">
+          <span className="text-sm text-ink-light/30">表紙</span>
+          <span className="meta-sm">1 / {totalCount + 1}</span>
+          <button
+            type="button"
+            onClick={() => flip("next")}
+            disabled={entries.length === 0}
+            className="flex items-center gap-1 text-sm text-ink-light hover:text-moss transition-colors disabled:opacity-25 disabled:pointer-events-none"
+          >
+            最新の日記 <ChevronRight className="size-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!entry) {
     return (
