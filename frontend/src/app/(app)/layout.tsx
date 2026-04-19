@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { ServiceWorkerRegister } from "@/components/sw-register";
 
 const isDemo = process.env.NEXT_PUBLIC_SUPABASE_URL === "https://demo.supabase.co";
 
@@ -21,5 +22,10 @@ export default async function AppLayout({
     }
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      <ServiceWorkerRegister />
+      {children}
+    </>
+  );
 }

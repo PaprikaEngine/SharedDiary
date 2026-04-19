@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Zen_Kaku_Gothic_New } from "next/font/google";
 import "./globals.css";
 
@@ -26,6 +26,20 @@ const zenKaku = Zen_Kaku_Gothic_New({
 export const metadata: Metadata = {
   title: "SharedDiary — 交換日記",
   description: "懐かしい交換日記を、もう一度。",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "交換日記",
+  },
+  icons: {
+    icon: "/icon.svg",
+    apple: "/icon.svg",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#181816",
 };
 
 export default function RootLayout({

@@ -3,360 +3,476 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import imageCompression from "browser-image-compression";
 import { createClient } from "@/lib/supabase/client";
-import { DiaryCanvas } from "@/components/diary-canvas";
+import { validateVideo } from "@/lib/video-utils";
+import { triggerBatonNotification } from "@/lib/notifications";
+import { DiaryCanvas, DIARY_CANVAS_WIDTH, DIARY_CANVAS_HEIGHT } from "@/components/diary-canvas";
 import type { DiaryCanvasHandle } from "@/components/diary-canvas";
+import { StampPicker, StampOverlayEditor, MAX_STAMPS } from "@/components/stamps";
+import type { PlacedStamp } from "@/components/stamps";
+import { MediaOverlayEditor, type PlacedMedia } from "@/components/placed-media";
+import { FlipbookEditor, type FlipbookData, DraggableFlipbook, type PlacedFlipbook } from "@/components/flipbook";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, ImagePlus, Film, BookOpen, Loader2 } from "lucide-react";
 
-type ImagePreview = {
-  id: string;
-  file: File;
-  preview: string;
-};
+// Center of the A4 canvas — new items drop here by default.
+const CANVAS_CENTER_X = DIARY_CANVAS_WIDTH / 2;
+const CANVAS_CENTER_Y = DIARY_CANVAS_HEIGHT / 2;
+
+// Base display width on the canvas for newly placed media.
+// Roughly 35% of page width — large enough to see, small enough that
+// multiple photos fit on the same page.
+const MEDIA_BASE_WIDTH = 280;
+const MAX_IMAGES = 10;
+const MAX_VIDEOS = 3;
+
+// Default size for a newly-placed flipbook on the 800×600 canvas.
+// 4:3 to match the flipbook's internal aspect ratio.
+const FLIPBOOK_BASE_WIDTH = 300;
+const FLIPBOOK_BASE_HEIGHT = 225;
+
+// Read natural dimensions from a compressed image/video File so we can
+// preserve its aspect ratio when placed on the canvas.
+function measureImage(file: File | Blob): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new window.Image();
+    img.onload = () => {
+      const w = img.naturalWidth || 1;
+      const h = img.naturalHeight || 1;
+      URL.revokeObjectURL(url);
+      resolve({ width: w, height: h });
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("failed to load image")); };
+    img.src = url;
+  });
+}
+
+function measureVideo(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const vid = document.createElement("video");
+    vid.preload = "metadata";
+    vid.muted = true;
+    vid.playsInline = true;
+    vid.onloadedmetadata = () => {
+      const w = vid.videoWidth || 1;
+      const h = vid.videoHeight || 1;
+      URL.revokeObjectURL(url);
+      resolve({ width: w, height: h });
+    };
+    vid.onerror = () => { URL.revokeObjectURL(url); reject(new Error("failed to load video")); };
+    vid.src = url;
+  });
+}
 
 export default function NewEntryPage() {
   const params = useParams();
   const groupId = params.id as string;
-  const [images, setImages] = useState<ImagePreview[]>([]);
+  const [placedMedia, setPlacedMedia] = useState<PlacedMedia[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [nextBatonHolder, setNextBatonHolder] = useState<string | null>(null);
+  // `members` excludes the current user — you can't pass the baton to
+  // yourself, that would break the whole exchange-diary concept.
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
   const [membersLoaded, setMembersLoaded] = useState(false);
+  const [flipbookData, setFlipbookData] = useState<FlipbookData | null>(null);
+  const [flipbookPlacement, setFlipbookPlacement] = useState<PlacedFlipbook | null>(null);
+  const [flipbookSelected, setFlipbookSelected] = useState(false);
+  const [showFlipbookEditor, setShowFlipbookEditor] = useState(false);
+  const [placedStamps, setPlacedStamps] = useState<PlacedStamp[]>([]);
+  const [showStampPicker, setShowStampPicker] = useState(false);
+  const [canvasScale, setCanvasScale] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<DiaryCanvasHandle>(null);
   const router = useRouter();
   const supabase = createClient();
 
-  // Load members on mount
   useEffect(() => {
     let mounted = true;
-
     const loadMembers = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user || !mounted) return;
-
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data } = await (supabase as any)
-        .from("group_members")
-        .select("user:users(id, name)")
-        .eq("group_id", groupId);
-
+      const { data } = await (supabase as any).from("group_members").select("user:users(id, name)").eq("group_id", groupId);
       if (data && mounted) {
-        const memberList = (
-          data as { user: { id: string; name: string } | null }[]
-        )
-          .map((m) => m.user)
-          .filter((u): u is { id: string; name: string } => u !== null);
-        setMembers(memberList);
-        const other = memberList.find((m) => m.id !== user.id);
-        setNextBatonHolder(other?.id ?? user.id);
+        const list = (data as { user: { id: string; name: string } | null }[]).map((m) => m.user).filter((u): u is { id: string; name: string } => u !== null);
+        const others = list.filter((m) => m.id !== user.id);
+        setMembers(others);
+        setNextBatonHolder(others[0]?.id ?? null);
         setMembersLoaded(true);
       }
     };
-
     loadMembers();
-
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [groupId, supabase]);
+
+  // Stagger successive placements so pieces don't stack exactly on top
+  // of each other — offsets wrap around a small diagonal.
+  const placementOffset = (index: number) => {
+    const k = index % 6;
+    return { dx: k * 30 - 60, dy: k * 20 - 40 };
+  };
+
+  const countByType = (type: "image" | "video") =>
+    placedMedia.filter((m) => m.type === type).length;
 
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-
-    const compressionOptions = {
-      maxSizeMB: 2,
-      maxWidthOrHeight: 1920,
-      useWebWorker: true,
-    };
-
-    for (let i = 0; i < files.length && images.length < 10; i++) {
+    for (let i = 0; i < files.length; i++) {
+      if (countByType("image") + i >= MAX_IMAGES) break;
       const file = files[i];
       if (!file.type.startsWith("image/")) continue;
-
       try {
-        const compressedFile = await imageCompression(file, compressionOptions);
-        const preview = URL.createObjectURL(compressedFile);
-
-        setImages((prev) => {
-          if (prev.length >= 10) return prev;
+        const compressed = await imageCompression(file, { maxSizeMB: 2, maxWidthOrHeight: 1920, useWebWorker: true });
+        const { width, height } = await measureImage(compressed);
+        const previewUrl = URL.createObjectURL(compressed);
+        setPlacedMedia((prev) => {
+          if (prev.filter((m) => m.type === "image").length >= MAX_IMAGES) {
+            URL.revokeObjectURL(previewUrl);
+            return prev;
+          }
+          const { dx, dy } = placementOffset(prev.length);
+          const aspect = height / width;
           return [
             ...prev,
-            { id: crypto.randomUUID(), file: compressedFile, preview },
+            {
+              instanceId: crypto.randomUUID(),
+              type: "image",
+              file: compressed,
+              previewUrl,
+              x: CANVAS_CENTER_X + dx,
+              y: CANVAS_CENTER_Y + dy,
+              scale: 1,
+              rotation: 0,
+              baseWidth: MEDIA_BASE_WIDTH,
+              baseHeight: MEDIA_BASE_WIDTH * aspect,
+            },
           ];
         });
-      } catch (err) {
-        console.error("Image compression failed:", err);
-      }
+      } catch (err) { console.error("Image processing failed:", err); }
     }
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const removeImage = (id: string) => {
-    setImages((prev) => {
-      const img = prev.find((i) => i.id === id);
-      if (img) URL.revokeObjectURL(img.preview);
-      return prev.filter((i) => i.id !== id);
-    });
+  const handleVideoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    for (let i = 0; i < files.length; i++) {
+      if (countByType("video") + i >= MAX_VIDEOS) break;
+      const file = files[i];
+      const result = await validateVideo(file);
+      if (!result.valid) { setError(result.error); continue; }
+      try {
+        const { width, height } = await measureVideo(file);
+        const previewUrl = URL.createObjectURL(file);
+        setPlacedMedia((prev) => {
+          if (prev.filter((m) => m.type === "video").length >= MAX_VIDEOS) {
+            URL.revokeObjectURL(previewUrl);
+            return prev;
+          }
+          const { dx, dy } = placementOffset(prev.length);
+          const aspect = height / width;
+          return [
+            ...prev,
+            {
+              instanceId: crypto.randomUUID(),
+              type: "video",
+              file,
+              previewUrl,
+              x: CANVAS_CENTER_X + dx,
+              y: CANVAS_CENTER_Y + dy,
+              scale: 1,
+              rotation: 0,
+              baseWidth: MEDIA_BASE_WIDTH,
+              baseHeight: MEDIA_BASE_WIDTH * aspect,
+            },
+          ];
+        });
+      } catch (err) { console.error("Video processing failed:", err); }
+    }
+    if (videoInputRef.current) videoInputRef.current.value = "";
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-
     const canvasEmpty = canvasRef.current?.isEmpty() ?? true;
-
-    if (canvasEmpty && images.length === 0) {
-      setError("日記を書くか画像を追加してください");
-      return;
-    }
-
-    if (!nextBatonHolder) {
-      setError("次のバトンを渡す人を選んでください");
-      return;
-    }
-
+    if (canvasEmpty && placedMedia.length === 0 && placedStamps.length === 0 && !flipbookData) { setError("日記を書くか画像・動画・スタンプ・パラパラアニメを追加してください"); return; }
+    if (!nextBatonHolder) { setError("バトンを渡すメンバーがいません。先にグループに招待してください"); return; }
     setLoading(true);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      setError("ログインが必要です");
-      setLoading(false);
-      return;
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setError("ログインが必要です"); setLoading(false); return; }
 
-    // Create entry (body is null since content is in the canvas image)
+    // Capture the current canvas background type so the viewer can
+    // reproduce it exactly with CSS — the PNG is saved transparent.
+    const canvasBackground = !canvasEmpty ? canvasRef.current?.getBackground() ?? null : null;
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: entry, error: entryError } = await (supabase as any)
-      .from("entries")
-      .insert({
-        group_id: groupId,
-        author_id: user.id,
-        body: null,
-      })
-      .select()
-      .single();
+    const { data: entry, error: entryError } = await (supabase as any).from("entries").insert({ group_id: groupId, author_id: user.id, body: null, canvas_background: canvasBackground, canvas_width: DIARY_CANVAS_WIDTH, canvas_height: DIARY_CANVAS_HEIGHT }).select().single();
+    if (entryError) { setError(entryError.message); setLoading(false); return; }
 
-    if (entryError) {
-      setError(entryError.message);
-      setLoading(false);
-      return;
-    }
-
-    // Export and upload canvas image
     if (!canvasEmpty && canvasRef.current) {
       const blob = await canvasRef.current.exportImage();
       if (blob) {
-        const canvasPath = `${groupId}/${entry.id}/canvas.png`;
-        const { error: uploadError } = await supabase.storage
-          .from("media")
-          .upload(canvasPath, blob, { contentType: "image/png" });
-
-        if (!uploadError) {
-          const {
-            data: { publicUrl },
-          } = supabase.storage.from("media").getPublicUrl(canvasPath);
-
+        const path = `${groupId}/${entry.id}/canvas.png`;
+        const { error: upErr } = await supabase.storage.from("media").upload(path, blob, { contentType: "image/png" });
+        if (!upErr) {
+          const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(path);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any).from("entry_media").insert({
-            entry_id: entry.id,
-            type: "image",
-            url: publicUrl,
-            order: 0,
-          });
+          await (supabase as any).from("entry_media").insert({ entry_id: entry.id, type: "image", url: publicUrl, order: 0 });
         }
       }
     }
 
-    // Upload attached images
-    for (let i = 0; i < images.length; i++) {
-      const img = images[i];
-      const path = `${groupId}/${entry.id}/${img.id}`;
-
-      const { error: uploadError } = await supabase.storage
+    // Upload each placed image/video, then record its canvas position
+    // so the viewer can render the overlay at the exact spot the author
+    // dropped it.
+    const mediaOrderStart = canvasEmpty ? 0 : 1;
+    for (let i = 0; i < placedMedia.length; i++) {
+      const m = placedMedia[i];
+      if (!m.file) continue;
+      const isVideo = m.type === "video";
+      const path = isVideo
+        ? `${groupId}/${entry.id}/video/${m.instanceId}`
+        : `${groupId}/${entry.id}/${m.instanceId}`;
+      const { error: upErr } = await supabase.storage
         .from("media")
-        .upload(path, img.file);
-
-      if (uploadError) {
-        console.error("Upload error:", uploadError);
-        continue;
-      }
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("media").getPublicUrl(path);
-
+        .upload(path, m.file, isVideo ? { contentType: m.file.type } : undefined);
+      if (upErr) { console.error(upErr); continue; }
+      const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(path);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any).from("entry_media").insert({
         entry_id: entry.id,
-        type: "image",
+        type: m.type,
         url: publicUrl,
-        order: (canvasEmpty ? 0 : 1) + i,
+        order: mediaOrderStart + i,
+        x: m.x,
+        y: m.y,
+        scale: m.scale,
+        rotation: m.rotation,
+        base_width: m.baseWidth,
+        width: Math.round(m.baseWidth),
+        height: Math.round(m.baseHeight),
       });
     }
 
-    // Update baton holder
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any)
-      .from("groups")
-      .update({ current_baton_holder_id: nextBatonHolder })
-      .eq("id", groupId);
+    if (placedStamps.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("entry_stamps").insert(placedStamps.map((s) => ({ entry_id: entry.id, stamp_id: s.stampId, x: s.x, y: s.y, scale: s.scale, rotation: s.rotation })));
+    }
 
+    // Save flipbook animation with its canvas placement (if any)
+    if (flipbookData && flipbookData.frames.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: fb } = await (supabase as any).from("flipbooks").insert({
+        entry_id: entry.id,
+        fps: flipbookData.fps,
+        loop: flipbookData.loop,
+        x: flipbookPlacement?.x ?? null,
+        y: flipbookPlacement?.y ?? null,
+        scale: flipbookPlacement?.scale ?? null,
+        rotation: flipbookPlacement?.rotation ?? null,
+        base_width: flipbookPlacement?.baseWidth ?? null,
+        base_height: flipbookPlacement?.baseHeight ?? null,
+      }).select().single();
+      if (fb) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("flipbook_frames").insert(
+          flipbookData.frames.map((f) => ({ flipbook_id: fb.id, order: f.order, canvas_json: f.canvasJson }))
+        );
+      }
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from("groups").update({ current_baton_holder_id: nextBatonHolder, baton_passed_at: new Date().toISOString() }).eq("id", groupId);
+    // Fire-and-forget notification
+    triggerBatonNotification(groupId, nextBatonHolder);
     router.push(`/groups/${groupId}`);
     router.refresh();
   };
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-10 border-b rule-hair" style={{ background: "color-mix(in srgb, var(--surface) 92%, transparent)", backdropFilter: "blur(8px)" }}>
-        <div className="max-w-5xl mx-auto px-6 md:px-10 h-14 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <Link href={`/groups/${groupId}`} className="btn btn-flat btn-sm">
-              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
-                <path d="M11 7H3M3 7L6.5 3.5M3 7L6.5 10.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              戻る
-            </Link>
-            <span className="t-xlo">/</span>
-            <span className="meta">New entry</span>
-          </div>
-          <button type="submit" form="new-entry-form" disabled={loading} className="btn btn-primary btn-sm">
-            {loading ? "投稿中..." : "投稿してバトンを渡す"}
-          </button>
+      <header className="sticky top-0 z-10 bg-cream/90 backdrop-blur-sm border-b border-cream-dark/50">
+        <div className="max-w-4xl mx-auto px-5 h-14 flex items-center gap-3">
+          <Link href={`/groups/${groupId}`} className="text-ink-light hover:text-ink transition-colors">
+            <ArrowLeft className="size-5" />
+          </Link>
+          <h1 className="text-base font-semibold text-ink">日記を書く</h1>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-6 md:px-10 py-10 reveal reveal-1">
-        <div className="mb-8">
-          <h1 className="text-[28px] font-medium tracking-[-0.02em] t-hi leading-tight">日記を書く</h1>
-          <p className="mt-1.5 text-[13.5px] t-md">書き終えたら、次に渡す人を選びます。</p>
-        </div>
-
+      <main className="max-w-4xl mx-auto px-5 py-6">
         {error && (
-          <div className="mb-6 text-[13px] px-3.5 py-2.5 rounded-[8px] border" style={{ borderColor: "var(--danger)", color: "var(--danger)", background: "var(--danger-soft)" }}>
-            {error}
-          </div>
+          <div className="text-sm text-destructive bg-destructive/8 border border-destructive/15 rounded-lg px-3 py-2 mb-4">{error}</div>
         )}
 
-        <form id="new-entry-form" onSubmit={handleSubmit} className="space-y-8">
-          {/* Canvas Editor */}
-          <section className="card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2.5">
-                <span className="chip chip-ink">1</span>
-                <span className="text-[14px] font-medium t-hi">キャンバス</span>
-              </div>
-              <span className="meta-sm">ペン・消しゴム・テキスト</span>
-            </div>
-            <DiaryCanvas ref={canvasRef} width={800} height={600} />
-          </section>
-
-          {/* Photo Attachments */}
-          <section className="card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2.5">
-                <span className="chip chip-ink">2</span>
-                <span className="text-[14px] font-medium t-hi">写真</span>
-              </div>
-              <span className="meta-sm">{images.length} / 10</span>
-            </div>
-
-            <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
-              {images.map((img) => (
-                <div key={img.id} className="relative aspect-square rounded-[10px] overflow-hidden border" style={{ borderColor: "var(--stroke)" }}>
-                  <Image
-                    src={img.preview}
-                    alt="Preview"
-                    fill
-                    className="object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeImage(img.id)}
-                    className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center text-[12px]"
-                    style={{ background: "rgba(24,24,22,0.85)", color: "var(--paper)" }}
-                    aria-label="Remove"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-
-              {images.length < 10 && (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="aspect-square rounded-[10px] flex flex-col items-center justify-center gap-1.5 transition-all"
-                  style={{ background: "var(--paper-alt)", border: "1px dashed var(--stroke-strong)", color: "var(--ink-2)" }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-                    <path d="M9 3V15M3 9H15" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                  </svg>
-                  <span className="text-[11px] t-md font-medium">写真を追加</span>
-                </button>
-              )}
-            </div>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handleImageSelect}
-              className="hidden"
-            />
-          </section>
-
-          {/* Baton Selection */}
-          <section className="card p-5">
-            <div className="flex items-center gap-2.5 mb-4">
-              <span className="chip chip-ink">3</span>
-              <span className="text-[14px] font-medium t-hi">次にバトンを渡す人</span>
-            </div>
-
-            {membersLoaded ? (
-              <div className="flex flex-wrap gap-2">
-                {members.map((member) => {
-                  const active = nextBatonHolder === member.id;
-                  return (
-                    <button
-                      key={member.id}
-                      type="button"
-                      onClick={() => setNextBatonHolder(member.id)}
-                      className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full border transition-all"
-                      style={
-                        active
-                          ? { background: "var(--ink)", borderColor: "var(--ink)", color: "var(--paper)" }
-                          : { background: "var(--paper)", borderColor: "var(--stroke)", color: "var(--ink)" }
-                      }
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Canvas */}
+          <div className="relative">
+            <DiaryCanvas
+              ref={canvasRef} width={DIARY_CANVAS_WIDTH} height={DIARY_CANVAS_HEIGHT}
+              onScaleChange={setCanvasScale}
+              onStampClick={() => setShowStampPicker((v) => !v)}
+              stampCount={placedStamps.length}
+              stampOverlay={
+                <>
+                  {placedMedia.length > 0 && (
+                    <MediaOverlayEditor
+                      media={placedMedia}
+                      onMediaChange={setPlacedMedia}
+                      canvasScale={canvasScale}
+                    />
+                  )}
+                  {flipbookPlacement && (
+                    <div
+                      className="absolute inset-0"
+                      style={{ zIndex: 4 }}
+                      onClick={() => setFlipbookSelected(false)}
                     >
-                      <span className="avatar" style={active ? { background: "var(--paper)", color: "var(--ink)", borderColor: "transparent" } : undefined}>
-                        {member.name.charAt(0)}
-                      </span>
-                      <span className="text-[13px] font-medium">{member.name}</span>
-                    </button>
-                  );
-                })}
+                      <DraggableFlipbook
+                        flipbook={flipbookPlacement}
+                        canvasScale={canvasScale}
+                        selected={flipbookSelected}
+                        onSelect={() => setFlipbookSelected(true)}
+                        onUpdate={(updates) =>
+                          setFlipbookPlacement((prev) => (prev ? { ...prev, ...updates } : prev))
+                        }
+                        onEdit={() => setShowFlipbookEditor(true)}
+                        onDelete={() => {
+                          setFlipbookPlacement(null);
+                          setFlipbookData(null);
+                          setFlipbookSelected(false);
+                        }}
+                      />
+                    </div>
+                  )}
+                  {placedStamps.length > 0 && (
+                    <StampOverlayEditor stamps={placedStamps} onStampsChange={setPlacedStamps} canvasWidth={DIARY_CANVAS_WIDTH} canvasHeight={DIARY_CANVAS_HEIGHT} canvasScale={canvasScale} />
+                  )}
+                </>
+              }
+            />
+            {showStampPicker && (
+              <div className="mt-3">
+                <StampPicker groupId={groupId} onSelect={(stamp) => {
+                  if (placedStamps.length >= MAX_STAMPS) return;
+                  setPlacedStamps((p) => [...p, { instanceId: crypto.randomUUID(), stampId: stamp.id, url: stamp.url, x: CANVAS_CENTER_X, y: CANVAS_CENTER_Y, scale: 1, rotation: 0 }]);
+                }} onClose={() => setShowStampPicker(false)} />
               </div>
-            ) : (
-              <p className="text-[13px] t-md">読み込み中...</p>
             )}
-          </section>
+          </div>
 
-          {/* Footer action for mobile / tall viewports */}
-          <button type="submit" disabled={loading} className="btn btn-primary btn-lg btn-block">
-            {loading ? "投稿中..." : "投稿してバトンを渡す"}
-          </button>
+          {/* Media — images/videos are placed directly on the canvas */}
+          <div className="paper-plain rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-ink-light">写真・動画をノートに貼る</span>
+              <span className="text-xs text-ink-light/50">
+                画像 {countByType("image")}/{MAX_IMAGES}・動画 {countByType("video")}/{MAX_VIDEOS}
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={countByType("image") >= MAX_IMAGES}
+                className="flex-1 flex items-center justify-center gap-2 py-3 border border-dashed border-cream-dark rounded-lg text-xs text-ink-light hover:border-moss/40 hover:text-moss transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <ImagePlus className="size-4" />
+                写真を追加
+              </button>
+              <button
+                type="button"
+                onClick={() => videoInputRef.current?.click()}
+                disabled={countByType("video") >= MAX_VIDEOS}
+                className="flex-1 flex items-center justify-center gap-2 py-3 border border-dashed border-cream-dark rounded-lg text-xs text-ink-light hover:border-moss/40 hover:text-moss transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Film className="size-4" />
+                動画を追加
+              </button>
+            </div>
+            <p className="mt-2 text-[10px] text-ink-light/50">
+              ノートに貼った後、ドラッグで移動・選択中のボタンで拡大縮小や回転ができます
+            </p>
+            <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} className="hidden" />
+            <input ref={videoInputRef} type="file" accept="video/mp4,video/webm" multiple onChange={handleVideoSelect} className="hidden" />
+          </div>
+
+          {/* Flipbook — placed as an overlay on the canvas. The side
+              panel just hosts the "add" entry point; once placed, the
+              user interacts with it directly on the notebook. */}
+          {!flipbookPlacement && (
+            <div className="paper-plain rounded-xl p-4">
+              <button type="button" onClick={() => setShowFlipbookEditor(true)}
+                className="w-full flex items-center justify-center gap-2 py-3 border border-dashed border-cream-dark rounded-lg text-xs text-ink-light hover:border-moss/40 hover:text-moss transition-colors">
+                <BookOpen className="size-4" />
+                パラパラアニメをノートに貼る
+              </button>
+            </div>
+          )}
+
+          {showFlipbookEditor && (
+            <FlipbookEditor
+              initial={flipbookData ?? undefined}
+              onSave={(data) => {
+                setFlipbookData(data);
+                // First-time save → drop it at canvas center. Otherwise
+                // preserve existing position/scale/rotation but refresh
+                // the preview to the new first frame.
+                const firstFrame = data.frames[0]?.canvasJson ?? null;
+                setFlipbookPlacement((prev) =>
+                  prev
+                    ? { ...prev, previewDataUrl: firstFrame }
+                    : {
+                        x: CANVAS_CENTER_X,
+                        y: CANVAS_CENTER_Y,
+                        scale: 1,
+                        rotation: 0,
+                        baseWidth: FLIPBOOK_BASE_WIDTH,
+                        baseHeight: FLIPBOOK_BASE_HEIGHT,
+                        previewDataUrl: firstFrame,
+                      }
+                );
+                setShowFlipbookEditor(false);
+              }}
+              onClose={() => setShowFlipbookEditor(false)}
+            />
+          )}
+
+          {/* Baton */}
+          <div className="paper-plain rounded-xl p-4">
+            <span className="block text-xs font-medium text-ink-light mb-2">次にバトンを渡す人</span>
+            {!membersLoaded ? (
+              <p className="text-xs text-ink-light/50">読み込み中...</p>
+            ) : members.length === 0 ? (
+              <p className="text-xs text-ink-light">
+                他にメンバーがいません。
+                <Link href={`/groups/${groupId}`} className="text-moss hover:underline ml-1">グループに招待</Link>
+                してからバトンを渡してください。
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {members.map((m) => (
+                  <button key={m.id} type="button" onClick={() => setNextBatonHolder(m.id)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${nextBatonHolder === m.id ? "bg-moss text-white" : "bg-cream-dark/60 text-ink-light hover:bg-cream-dark"}`}
+                  >
+                    {m.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Submit */}
+          <Button type="submit" disabled={loading || !nextBatonHolder} className="w-full h-11 bg-moss hover:bg-moss-dark text-base rounded-xl">
+            {loading ? <Loader2 className="size-4 animate-spin" /> : "日記を投稿してバトンを渡す"}
+          </Button>
         </form>
       </main>
     </div>

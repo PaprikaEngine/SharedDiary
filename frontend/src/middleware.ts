@@ -1,9 +1,24 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { GATE_COOKIE, hashPassphrase } from "@/lib/gate";
 
 const isDemo = process.env.NEXT_PUBLIC_SUPABASE_URL === "https://demo.supabase.co";
 
 export async function middleware(request: NextRequest) {
+  // --- Beta gate: passphrase wall ---
+  const gatePassphrase = process.env.GATE_PASSPHRASE;
+  const isGatePage = request.nextUrl.pathname === "/gate";
+  const isGateApi = request.nextUrl.pathname === "/api/gate";
+
+  if (gatePassphrase && !isGatePage && !isGateApi) {
+    const token = request.cookies.get(GATE_COOKIE)?.value;
+    const expected = await hashPassphrase(gatePassphrase);
+    if (token !== expected) {
+      return NextResponse.redirect(new URL("/gate", request.url));
+    }
+  }
+
+  // --- Normal auth flow ---
   let supabaseResponse = NextResponse.next({
     request,
   });

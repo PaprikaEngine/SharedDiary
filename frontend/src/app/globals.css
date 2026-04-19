@@ -1,52 +1,102 @@
 @import "tailwindcss";
 
-:root {
-  /* Surfaces */
-  --surface: #F6F5F0;
-  --paper: #FCFCF9;
-  --paper-alt: #F1EFE7;
-  --stroke: #E5E2D8;
-  --stroke-strong: #D3CFC0;
+@layer base {
+  :root {
+    /* --- Notebook-app palette (canonical names) --- */
+    --surface: #F6F5F0;
+    --paper: #FCFCF9;
+    --paper-alt: #F1EFE7;
+    --stroke: #E5E2D8;
+    --stroke-strong: #D3CFC0;
 
-  /* Ink */
-  --ink: #181816;
-  --ink-2: #5C5A52;
-  --ink-3: #8F8D85;
-  --ink-4: #B5B2A7;
+    /* Ink */
+    --ink: #181816;
+    --ink-2: #5C5A52;
+    --ink-3: #8F8D85;
+    --ink-4: #B5B2A7;
 
-  /* Accent — muted pine */
-  --accent: #2F4A3A;
-  --accent-hi: #3E6650;
-  --accent-lo: #1E3125;
-  --accent-soft: rgba(47, 74, 58, 0.08);
+    /* Accent — muted pine */
+    --accent: #2F4A3A;
+    --accent-hi: #3E6650;
+    --accent-lo: #1E3125;
+    --accent-soft: rgba(47, 74, 58, 0.08);
 
-  /* Signal — warm amber, used sparingly for baton/active */
-  --signal: #C8975E;
-  --signal-hi: #E0AF70;
-  --signal-soft: rgba(200, 151, 94, 0.12);
+    /* Signal — warm amber, used sparingly for baton/active */
+    --signal: #C8975E;
+    --signal-hi: #E0AF70;
+    --signal-soft: rgba(200, 151, 94, 0.12);
 
-  /* Semantic */
-  --danger: #C85757;
-  --danger-soft: rgba(200, 87, 87, 0.08);
+    /* Semantic */
+    --danger: #C85757;
+    --danger-soft: rgba(200, 87, 87, 0.08);
 
-  /* Legacy aliases — keep every existing Tailwind bg-cream / text-moss / etc. working */
-  --color-cream: var(--surface);
-  --color-cream-dark: var(--stroke);
-  --color-moss: var(--accent);
-  --color-moss-light: var(--accent-hi);
-  --color-moss-dark: var(--accent-lo);
-  --color-ink: var(--ink);
-  --color-ink-light: var(--ink-2);
-  --color-paper: var(--paper);
-  --color-slate: var(--ink-3);
-  --color-mist: var(--stroke);
-  --color-haze: var(--paper-alt);
-  --color-brass: var(--signal);
-  --color-brass-hi: var(--signal-hi);
-  --color-forest: var(--accent);
-  --color-forest-hi: var(--accent-hi);
-  --color-forest-lo: var(--accent-lo);
-  --color-graphite: var(--ink-2);
+    /* --- Aliases (feature/auth naming) --- */
+    --paper-bg: var(--paper);
+    --ink-core: var(--ink);
+    --accent-pine: var(--accent);
+    --accent-pine-hi: var(--accent-hi);
+    --accent-pine-lo: var(--accent-lo);
+    --signal-amber: var(--signal);
+    --danger-red: var(--danger);
+
+    /* --- Legacy brand tokens remapped onto the palette --- */
+    --color-cream: var(--surface);
+    --color-cream-dark: var(--stroke);
+    --color-moss: var(--accent);
+    --color-moss-light: var(--accent-hi);
+    --color-moss-dark: var(--accent-lo);
+    --color-ink: var(--ink);
+    --color-ink-light: var(--ink-2);
+    --color-paper: var(--paper);
+    --color-slate: var(--ink-3);
+    --color-mist: var(--stroke);
+    --color-haze: var(--paper-alt);
+    --color-brass: var(--signal);
+    --color-brass-hi: var(--signal-hi);
+    --color-forest: var(--accent);
+    --color-forest-hi: var(--accent-hi);
+    --color-forest-lo: var(--accent-lo);
+    --color-graphite: var(--ink-2);
+    --color-coral: var(--signal);
+    --color-coral-light: var(--signal-hi);
+
+    /* --- shadcn semantic tokens, retuned to the new palette --- */
+    --radius: 0.625rem;
+    --background: oklch(0.965 0.006 90);
+    --foreground: oklch(0.17 0.005 80);
+    --card: oklch(0.985 0.004 85);
+    --card-foreground: oklch(0.17 0.005 80);
+    --popover: oklch(0.985 0.004 85);
+    --popover-foreground: oklch(0.17 0.005 80);
+    --primary: oklch(0.17 0.005 80);
+    --primary-foreground: oklch(0.985 0.004 85);
+    --secondary: oklch(0.94 0.010 85);
+    --secondary-foreground: oklch(0.25 0.01 80);
+    --muted: oklch(0.94 0.010 85);
+    --muted-foreground: oklch(0.50 0.010 80);
+    --shadcn-accent: oklch(0.38 0.045 155);
+    --shadcn-accent-foreground: oklch(0.985 0.004 85);
+    --destructive: oklch(0.58 0.17 25);
+    --destructive-foreground: oklch(0.985 0.004 85);
+    --border: oklch(0.90 0.012 85);
+    --input: oklch(0.90 0.012 85);
+    --ring: oklch(0.17 0.005 80);
+
+    --chart-1: oklch(0.55 0.10 140);
+    --chart-2: oklch(0.60 0.10 170);
+    --chart-3: oklch(0.50 0.08 50);
+    --chart-4: oklch(0.65 0.12 80);
+    --chart-5: oklch(0.50 0.15 25);
+
+    --sidebar-background: oklch(0.97 0.006 90);
+    --sidebar-foreground: oklch(0.25 0.008 80);
+    --sidebar-primary: oklch(0.17 0.005 80);
+    --sidebar-primary-foreground: oklch(0.985 0.004 85);
+    --sidebar-accent: oklch(0.93 0.015 85);
+    --sidebar-accent-foreground: oklch(0.25 0.008 80);
+    --sidebar-border: oklch(0.90 0.012 85);
+    --sidebar-ring: oklch(0.17 0.005 80);
+  }
 }
 
 @theme inline {
@@ -61,13 +111,52 @@
   --color-haze: var(--color-haze);
   --color-slate: var(--color-slate);
   --color-brass: var(--color-brass);
+  --color-coral: var(--color-coral);
+  --color-coral-light: var(--color-coral-light);
 
   --font-sans: var(--font-geist-sans), "Zen Kaku Gothic New", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-serif: var(--font-geist-sans), "Zen Kaku Gothic New", sans-serif;
   --font-display: var(--font-geist-sans), "Zen Kaku Gothic New", sans-serif;
+  --font-maru: var(--font-geist-sans), "Zen Kaku Gothic New", sans-serif;
+  --font-handwriting: var(--font-geist-sans), "Zen Kaku Gothic New", sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--shadcn-accent);
+  --color-accent-foreground: var(--shadcn-accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar-background: var(--sidebar-background);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius: var(--radius);
 }
 
+/* --- Base --- */
 html {
   background: var(--surface);
   color: var(--ink);
@@ -80,8 +169,62 @@ body {
   background: var(--surface);
   color: var(--ink);
   font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
   letter-spacing: -0.005em;
 }
+
+/* --- Surfaces (kept for diary canvas viewer) --- */
+.paper {
+  background-color: var(--paper);
+}
+
+.paper-plain {
+  background-color: var(--paper);
+  border: 1px solid var(--stroke);
+}
+
+.page-shadow {
+  box-shadow:
+    0 1px 0 rgba(24, 24, 22, 0.02),
+    0 8px 24px -12px rgba(24, 24, 22, 0.08);
+}
+
+.hairline {
+  border-color: var(--stroke);
+}
+
+/* Decorative "tape" is retired — no-op so legacy markup still lays out */
+.tape::before { content: none !important; }
+
+.stitch {
+  border: 1px solid var(--stroke);
+}
+
+.washi-hover { position: relative; }
+.washi-hover::after { display: none !important; }
+
+/* --- Reveal / stagger animations --- */
+@keyframes write-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-write-in { animation: write-in 0.4s ease-out both; }
+
+.stagger-children > * { animation: write-in 0.35s ease-out both; }
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 60ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 180ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 240ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 300ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 360ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 420ms; }
+
+/* ================================================================
+ * Notebook-app design system utilities
+ * Bare names (.btn, .card, .chip…) are canonical.
+ * `-nb` suffixed aliases are kept so feature/auth pages keep working.
+ * ================================================================ */
 
 @layer utilities {
   .font-sans-ui { font-family: var(--font-sans); }
@@ -121,11 +264,11 @@ body {
     color: var(--ink-3);
   }
 
-  /* Hairline */
   .rule-hair { border-color: var(--stroke); }
 
   /* Card — the default surface unit */
-  .card {
+  .card,
+  .card-note {
     background: var(--paper);
     border: 1px solid var(--stroke);
     border-radius: 12px;
@@ -136,13 +279,14 @@ body {
     border: 1px solid var(--stroke);
     border-radius: 10px;
   }
-  .card:hover {
+  .card:hover,
+  .card-note:hover {
     border-color: var(--stroke-strong);
     box-shadow: 0 1px 0 rgba(24, 24, 22, 0.02),
                 0 8px 24px -12px rgba(24, 24, 22, 0.08);
   }
 
-  /* Inset tile (used inside list rows, lighter chrome) */
+  /* Tile — inset row, lighter chrome */
   .tile {
     background: transparent;
     border-radius: 10px;
@@ -150,8 +294,9 @@ body {
   }
   .tile:hover { background: var(--paper); }
 
-  /* Primary button — solid ink */
-  .btn {
+  /* Button — ink-solid by default */
+  .btn,
+  .btn-nb {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -167,54 +312,67 @@ body {
     line-height: 1.2;
     cursor: pointer;
   }
-  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn:disabled,
+  .btn-nb:disabled { opacity: 0.45; cursor: not-allowed; }
 
-  .btn-primary {
+  .btn-primary,
+  .btn-nb-primary {
     background: var(--ink);
     color: var(--paper);
     border-color: var(--ink);
   }
-  .btn-primary:hover:not(:disabled) {
+  .btn-primary:hover:not(:disabled),
+  .btn-nb-primary:hover:not(:disabled) {
     background: #000;
     border-color: #000;
   }
   .btn-primary:active:not(:disabled) { transform: translateY(0.5px); }
 
-  .btn-accent {
+  .btn-accent,
+  .btn-nb-accent {
     background: var(--accent);
     color: var(--paper);
     border-color: var(--accent);
   }
-  .btn-accent:hover:not(:disabled) {
+  .btn-accent:hover:not(:disabled),
+  .btn-nb-accent:hover:not(:disabled) {
     background: var(--accent-lo);
     border-color: var(--accent-lo);
   }
 
-  .btn-ghost {
+  .btn-ghost,
+  .btn-nb-ghost {
     background: var(--paper);
     color: var(--ink);
     border-color: var(--stroke);
   }
-  .btn-ghost:hover:not(:disabled) {
+  .btn-ghost:hover:not(:disabled),
+  .btn-nb-ghost:hover:not(:disabled) {
     background: var(--paper-alt);
     border-color: var(--stroke-strong);
   }
 
-  .btn-flat {
+  .btn-flat,
+  .btn-nb-flat {
     background: transparent;
     color: var(--ink);
     border-color: transparent;
   }
-  .btn-flat:hover:not(:disabled) {
+  .btn-flat:hover:not(:disabled),
+  .btn-nb-flat:hover:not(:disabled) {
     background: var(--paper-alt);
   }
 
-  .btn-sm { font-size: 12.5px; padding: 0.45rem 0.85rem; border-radius: 7px; }
-  .btn-lg { font-size: 14.5px; padding: 0.85rem 1.4rem; border-radius: 10px; }
-  .btn-block { width: 100%; }
+  .btn-sm,
+  .btn-nb-sm { font-size: 12.5px; padding: 0.45rem 0.85rem; border-radius: 7px; }
+  .btn-lg,
+  .btn-nb-lg { font-size: 14.5px; padding: 0.85rem 1.4rem; border-radius: 10px; }
+  .btn-block,
+  .btn-nb-block { width: 100%; }
 
-  /* Pill chip */
-  .chip {
+  /* Chip — pill */
+  .chip,
+  .chip-nb {
     display: inline-flex;
     align-items: center;
     gap: 0.4em;
@@ -228,24 +386,28 @@ body {
     border: 1px solid var(--stroke);
     line-height: 1.3;
   }
-  .chip-accent {
+  .chip-accent,
+  .chip-nb-accent {
     background: var(--accent-soft);
     color: var(--accent-lo);
     border-color: transparent;
   }
-  .chip-signal {
+  .chip-signal,
+  .chip-nb-signal {
     background: var(--signal-soft);
     color: #7B5828;
     border-color: transparent;
   }
-  .chip-ink {
+  .chip-ink,
+  .chip-nb-ink {
     background: var(--ink);
     color: var(--paper);
     border-color: var(--ink);
   }
 
   /* Segmented control */
-  .seg {
+  .seg,
+  .seg-nb {
     display: inline-flex;
     padding: 3px;
     background: var(--paper-alt);
@@ -253,7 +415,8 @@ body {
     border-radius: 9px;
     gap: 2px;
   }
-  .seg button {
+  .seg button,
+  .seg-nb button {
     font-family: var(--font-sans);
     font-size: 12.5px;
     font-weight: 500;
@@ -262,15 +425,18 @@ body {
     color: var(--ink-2);
     transition: background 160ms ease, color 160ms ease;
   }
-  .seg button:hover { color: var(--ink); }
-  .seg button[data-active="true"] {
+  .seg button:hover,
+  .seg-nb button:hover { color: var(--ink); }
+  .seg button[data-active="true"],
+  .seg-nb button[data-active="true"] {
     background: var(--paper);
     color: var(--ink);
     box-shadow: 0 1px 2px rgba(24, 24, 22, 0.06);
   }
 
-  /* Input — clean note-app style */
-  .field {
+  /* Field — input */
+  .field,
+  .field-nb {
     width: 100%;
     font-family: var(--font-sans);
     font-size: 14px;
@@ -281,18 +447,21 @@ body {
     padding: 0.7rem 0.9rem;
     transition: border-color 160ms ease, box-shadow 160ms ease;
   }
-  .field:focus {
+  .field:focus,
+  .field-nb:focus {
     outline: none;
     border-color: var(--ink);
     box-shadow: 0 0 0 3px rgba(24, 24, 22, 0.06);
   }
-  .field-lg {
+  .field-lg,
+  .field-nb-lg {
     font-size: 16px;
     padding: 0.85rem 1rem;
   }
 
   /* Avatar */
-  .avatar {
+  .avatar,
+  .avatar-nb {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -306,37 +475,44 @@ body {
     color: var(--ink-2);
     line-height: 1;
   }
-  .avatar-lg {
+  .avatar-lg,
+  .avatar-nb-lg {
     width: 40px;
     height: 40px;
     border-radius: 10px;
     font-size: 14px;
   }
-  .avatar-xl {
+  .avatar-xl,
+  .avatar-nb-xl {
     width: 52px;
     height: 52px;
     border-radius: 12px;
     font-size: 17px;
   }
-  .avatar-accent {
+  .avatar-accent,
+  .avatar-nb-accent {
     background: var(--accent);
     color: var(--paper);
     border-color: var(--accent);
   }
-  .avatar-signal {
+  .avatar-signal,
+  .avatar-nb-signal {
     background: var(--signal);
     color: var(--paper);
     border-color: var(--signal);
   }
 
   /* Status dot */
-  .dot {
+  .dot,
+  .dot-nb {
     width: 6px; height: 6px; border-radius: 50%;
     background: var(--ink-4);
     display: inline-block;
   }
-  .dot-signal { background: var(--signal); box-shadow: 0 0 0 3px var(--signal-soft); }
-  .dot-accent { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .dot-signal,
+  .dot-nb-signal { background: var(--signal); box-shadow: 0 0 0 3px var(--signal-soft); }
+  .dot-accent,
+  .dot-nb-accent { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
   /* Reveal — quick, subtle */
   .reveal {
@@ -362,14 +538,13 @@ body {
   }
   .pulse-signal { animation: signalPulse 2.4s ease-in-out infinite; }
 
-  /* Divider */
   .divider {
     height: 1px;
     background: var(--stroke);
   }
 }
 
-/* Inputs revert */
+/* Inputs — keep typography consistent */
 input[type="text"],
 input[type="email"],
 input[type="password"],

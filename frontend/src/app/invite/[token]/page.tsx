@@ -64,7 +64,7 @@ export default async function InvitePage({ params }: Props) {
             <path d="M7 8L10 11L13 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
-        <span className="meta">You're invited</span>
+        <span className="meta">You&apos;re invited</span>
         <h1 className="text-[24px] font-medium tracking-[-0.02em] t-hi mt-3 mb-2">
           日記帳に招待されました
         </h1>

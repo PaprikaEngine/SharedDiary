@@ -4,10 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { ArrowLeft } from "lucide-react";
 
 export default function NewGroupPage() {
   const [name, setName] = useState("");
-  const [batonDeadlineDays, setBatonDeadlineDays] = useState(3);
+  const [batonDeadlineDays, setBatonDeadlineDays] = useState("3");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -19,47 +20,40 @@ export default function NewGroupPage() {
     setLoading(true);
 
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      setError("ログインが必要です");
-      setLoading(false);
-      return;
-    }
+    if (!user) { setError("ログインが必要です"); setLoading(false); return; }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (supabase as any)
       .from("groups")
-      .insert({
-        name,
-        baton_deadline_days: batonDeadlineDays,
-        created_by: user.id,
-      })
+      .insert({ name, baton_deadline_days: Number(batonDeadlineDays), created_by: user.id })
       .select()
       .single();
 
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-      return;
-    }
-
+    if (error) { setError(error.message); setLoading(false); return; }
     router.push(`/groups/${data.id}`);
     router.refresh();
   };
 
   const options = [
-    { v: 1, l: "1日" },
-    { v: 3, l: "3日" },
-    { v: 7, l: "1週間" },
-    { v: 14, l: "2週間" },
-    { v: 30, l: "1ヶ月" },
+    { v: "1", l: "1日" },
+    { v: "3", l: "3日" },
+    { v: "7", l: "1週間" },
+    { v: "14", l: "2週間" },
+    { v: "30", l: "1ヶ月" },
   ];
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-10 border-b rule-hair" style={{ background: "color-mix(in srgb, var(--surface) 92%, transparent)", backdropFilter: "blur(8px)" }}>
+      <header
+        className="sticky top-0 z-10 border-b rule-hair"
+        style={{
+          background: "color-mix(in srgb, var(--surface) 92%, transparent)",
+          backdropFilter: "blur(8px)",
+        }}
+      >
         <div className="max-w-3xl mx-auto px-6 md:px-10 h-14 flex items-center justify-between">
           <Link href="/groups" className="btn btn-flat btn-sm">
-            <ArrowLeft />
+            <ArrowLeft className="size-4" strokeWidth={1.6} />
             Library
           </Link>
           <span className="meta">New diary</span>
@@ -71,7 +65,14 @@ export default function NewGroupPage() {
         <p className="text-[13.5px] t-md mb-9">名前を決めるだけ。仲間は後から招待できます。</p>
 
         {error && (
-          <div className="mb-6 text-[13px] px-3.5 py-2.5 rounded-[8px] border" style={{ borderColor: "var(--danger)", color: "var(--danger)", background: "var(--danger-soft)" }}>
+          <div
+            className="mb-6 text-[13px] px-3.5 py-2.5 rounded-[8px] border"
+            style={{
+              borderColor: "var(--danger)",
+              color: "var(--danger)",
+              background: "var(--danger-soft)",
+            }}
+          >
             {error}
           </div>
         )}
@@ -117,7 +118,11 @@ export default function NewGroupPage() {
           </div>
 
           <div className="pt-2 flex items-center gap-3">
-            <button type="submit" disabled={loading || !name.trim()} className="btn btn-primary btn-lg">
+            <button
+              type="submit"
+              disabled={loading || !name.trim()}
+              className="btn btn-primary btn-lg"
+            >
               {loading ? "作成中..." : "日記帳を作成"}
             </button>
             <Link href="/groups" className="btn btn-flat btn-lg">
@@ -127,13 +132,5 @@ export default function NewGroupPage() {
         </form>
       </main>
     </div>
-  );
-}
-
-function ArrowLeft() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
-      <path d="M11 7H3M3 7L6.5 3.5M3 7L6.5 10.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
   );
 }
