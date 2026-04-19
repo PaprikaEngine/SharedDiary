@@ -1,11 +1,15 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { PEN_COLORS, BACKGROUND_OPTIONS, type BackgroundType } from "./diary-canvas";
 import { FONT_OPTIONS, type FontId, type TextAlign } from "./text-box-overlay";
 import { TAPES, BUILTIN_TAPE_IDS, type TapeId } from "./tape-patterns";
+import { ColorWheelPicker } from "./color-wheel-picker";
 
-export type Tool = "pen" | "eraser" | "text" | "tape";
-export type PenColor = "black" | "blue" | "red" | "green" | "orange" | "purple";
+export type Tool = "select" | "pen" | "eraser" | "text" | "tape" | "highlighter" | "neon";
+/** Free-form hex string. The preset swatches in `PEN_COLORS` are
+ *  convenience shortcuts; the color wheel can produce any hex value. */
+export type PenColor = string;
 
 type Props = {
   tool: Tool;
@@ -67,10 +71,38 @@ export function CanvasToolbar({
   onStampClick,
   stampCount = 0,
 }: Props) {
+  const [wheelOpen, setWheelOpen] = useState(false);
+  const wheelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!wheelOpen) return;
+    const onDown = (e: PointerEvent) => {
+      if (!wheelRef.current) return;
+      if (!wheelRef.current.contains(e.target as Node)) setWheelOpen(false);
+    };
+    window.addEventListener("pointerdown", onDown);
+    return () => window.removeEventListener("pointerdown", onDown);
+  }, [wheelOpen]);
+
+  const isPresetColor = PEN_COLORS.some(
+    (c) => c.value.toUpperCase() === penColor.toUpperCase()
+  );
+
   return (
     <div className="flex flex-wrap items-center gap-2 mb-3 p-3 bg-white border border-cream-dark rounded-lg">
       {/* Tools */}
       <div className="flex items-center gap-1">
+        <ToolButton
+          active={tool === "select"}
+          onClick={() => onToolChange("select")}
+          title="選択・移動"
+        >
+          {/* Classic arrow cursor */}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+            <path d="m13 13 6 6" />
+          </svg>
+        </ToolButton>
         <ToolButton
           active={tool === "pen"}
           onClick={() => onToolChange("pen")}
@@ -78,6 +110,30 @@ export function CanvasToolbar({
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+          </svg>
+        </ToolButton>
+        <ToolButton
+          active={tool === "highlighter"}
+          onClick={() => onToolChange("highlighter")}
+          title="蛍光ペン"
+        >
+          {/* Chisel highlighter */}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 11l-4 4v4h4l4-4" />
+            <path d="M14 4l6 6-8 8-6-6 8-8z" />
+            <path d="M5 19h14" strokeOpacity="0.5" />
+          </svg>
+        </ToolButton>
+        <ToolButton
+          active={tool === "neon"}
+          onClick={() => onToolChange("neon")}
+          title="ネオンペン"
+        >
+          {/* Pen with a sparkle — implies "glow" */}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+            <path d="M14 6l2 2" strokeOpacity="0.5" />
+            <path d="M4 7l.8 1.6L6.4 9.4 4.8 10.2 4 11.8 3.2 10.2 1.6 9.4 3.2 8.6 4 7z" strokeOpacity="0.8" fill="currentColor" />
           </svg>
         </ToolButton>
         <ToolButton
@@ -140,20 +196,52 @@ export function CanvasToolbar({
 
       {/* Colors */}
       <div className="flex items-center gap-1">
-        {PEN_COLORS.map((color) => (
+        {PEN_COLORS.map((color) => {
+          const active = penColor.toUpperCase() === color.value.toUpperCase();
+          return (
+            <button
+              key={color.value}
+              type="button"
+              onClick={() => onPenColorChange(color.value)}
+              className={`w-7 h-7 rounded-full border-2 transition-transform ${
+                active ? "border-moss scale-110" : "border-transparent hover:scale-105"
+              }`}
+              style={{ backgroundColor: color.value }}
+              title={color.label}
+            />
+          );
+        })}
+        {/* Color-wheel trigger */}
+        <div ref={wheelRef} className="relative">
           <button
-            key={color.id}
             type="button"
-            onClick={() => onPenColorChange(color.id)}
-            className={`w-7 h-7 rounded-full border-2 transition-transform ${
-              penColor === color.id
-                ? "border-moss scale-110"
-                : "border-transparent hover:scale-105"
+            onClick={() => setWheelOpen((v) => !v)}
+            className={`w-7 h-7 rounded-full border-2 transition-transform relative overflow-hidden ${
+              !isPresetColor || wheelOpen ? "border-moss scale-110" : "border-transparent hover:scale-105"
             }`}
-            style={{ backgroundColor: color.value }}
-            title={color.label}
-          />
-        ))}
+            title="色を自由に選ぶ"
+            aria-label="色環で色を選ぶ"
+            style={{
+              background:
+                "conic-gradient(from 0deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)",
+            }}
+          >
+            {!isPresetColor && (
+              <span
+                className="absolute inset-[5px] rounded-full border border-white"
+                style={{ backgroundColor: penColor }}
+              />
+            )}
+          </button>
+          {wheelOpen && (
+            <div
+              className="absolute z-30 mt-2 left-1/2 -translate-x-1/2 p-3 bg-white rounded-lg shadow-xl border border-cream-dark"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <ColorWheelPicker value={penColor} onChange={onPenColorChange} />
+            </div>
+          )}
+        </div>
       </div>
 
       <Separator />
@@ -290,7 +378,7 @@ export function CanvasToolbar({
             </button>
           </div>
         </>
-      ) : (
+      ) : tool === "pen" || tool === "eraser" || tool === "highlighter" || tool === "neon" ? (
         <div className="flex items-center gap-1">
           <span className="text-xs text-ink-light mr-1">線</span>
           {LINE_WIDTH_LABELS.map((label, i) => (
@@ -308,6 +396,9 @@ export function CanvasToolbar({
             </button>
           ))}
         </div>
+      ) : (
+        // Select tool — no secondary control; a hint is plenty.
+        <span className="text-xs text-ink-light">タップで選択 · ドラッグで移動</span>
       )}
 
       <Separator />

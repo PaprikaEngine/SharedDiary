@@ -15,15 +15,15 @@ import { TAPES, TAPE_ALPHA, type TapeId } from "./tape-patterns";
 
 // --- Types ---
 
-type StrokeElement = {
+export type StrokeElement = {
   type: "stroke";
   points: { x: number; y: number }[];
   color: string;
   width: number;
-  tool: "pen" | "eraser";
+  tool: "pen" | "eraser" | "highlighter" | "neon";
 };
 
-type TextElement = {
+export type TextElement = {
   type: "text";
   x: number;
   y: number;
@@ -32,7 +32,7 @@ type TextElement = {
   fontSize: number;
 };
 
-type TapeElement = {
+export type TapeElement = {
   type: "tape";
   x1: number;
   y1: number;
@@ -41,7 +41,24 @@ type TapeElement = {
   tapeId: TapeId;
 };
 
-type CanvasElement = StrokeElement | TextElement | TapeElement;
+export type CanvasElement = StrokeElement | TextElement | TapeElement;
+
+/** Serializable snapshot of the DiaryCanvas internal state. Parents
+ *  can store this (e.g. in IndexedDB) and rehydrate a fresh canvas
+ *  via the `initialSnapshot` prop so the user can resume composing
+ *  after a page reload. */
+export type DiarySnapshot = {
+  canvasElements: CanvasElement[];
+  textBoxes: TextBox[];
+  tool: Tool;
+  penColor: PenColor;
+  lineWidthIndex: number;
+  fontSizeIndex: number;
+  fontFamily: FontId;
+  textAlign: TextAlign;
+  tapeId: TapeId;
+  background: BackgroundType;
+};
 
 type Props = {
   width?: number;
@@ -54,6 +71,21 @@ type Props = {
   extraTapeIds?: TapeId[];
   /** Opens the upload / management UI for group tapes. */
   onTapePickerClick?: () => void;
+  /** Called when the user starts a pointer interaction on the draw
+   *  canvas itself (not on an overlay item). Parents use this to
+   *  clear overlay selections so clicking empty canvas deselects. */
+  onCanvasInteract?: () => void;
+  /** Hydrate the canvas from a saved draft. Applied once at mount;
+   *  subsequent changes are ignored — use the imperative handle if
+   *  further programmatic mutations are needed. */
+  initialSnapshot?: DiarySnapshot;
+  /** Emitted whenever any persistable part of the canvas state
+   *  changes. Parents typically debounce + save to a draft store. */
+  onChange?: (snapshot: DiarySnapshot) => void;
+  /** Emitted when the active tool changes. Parents use this to
+   *  toggle overlay interactivity (only the select tool lets users
+   *  tap/drag placed items; all drawing tools pass through). */
+  onToolChange?: (tool: Tool) => void;
 };
 
 // --- History reducer ---
@@ -118,18 +150,49 @@ export const BACKGROUND_OPTIONS: { id: BackgroundType; label: string }[] = [
   { id: "grid", label: "方眼" },
 ];
 
-export const PEN_COLORS: { id: PenColor; value: string; label: string }[] = [
-  { id: "black", value: "#2C2C2C", label: "黒" },
-  { id: "blue", value: "#1A5276", label: "青" },
-  { id: "red", value: "#C0392B", label: "赤" },
-  { id: "green", value: "#27AE60", label: "緑" },
-  { id: "orange", value: "#E67E22", label: "橙" },
-  { id: "purple", value: "#8E44AD", label: "紫" },
+/** Preset swatches for quick color selection. The full spectrum is
+ *  reachable via the color-wheel button in the toolbar. */
+export const PEN_COLORS: { value: string; label: string }[] = [
+  { value: "#2C2C2C", label: "黒" },
+  { value: "#1A5276", label: "青" },
+  { value: "#C0392B", label: "赤" },
+  { value: "#27AE60", label: "緑" },
+  { value: "#E67E22", label: "橙" },
+  { value: "#8E44AD", label: "紫" },
 ];
 
-const LINE_WIDTHS = [2, 4, 6];
+/** Legacy snapshots stored penColor as an enum id ("black", "blue", ...).
+ *  Newer snapshots store the hex value directly. This map lets us keep
+ *  old drafts working without a migration step. */
+const LEGACY_PEN_COLOR_MAP: Record<string, string> = {
+  black: "#2C2C2C",
+  blue: "#1A5276",
+  red: "#C0392B",
+  green: "#27AE60",
+  orange: "#E67E22",
+  purple: "#8E44AD",
+};
+
+function normalizePenColor(v: string | undefined): PenColor {
+  if (!v) return "#2C2C2C";
+  if (v.startsWith("#")) return v.toUpperCase();
+  return LEGACY_PEN_COLOR_MAP[v] ?? "#2C2C2C";
+}
+
+/** Stroke thickness per tool. The UI exposes three presets (細 / 中 / 太)
+ *  and picks from the appropriate array. Highlighter is much wider than
+ *  pen so a single swipe covers a line of text; neon sits in between. */
+const PEN_WIDTHS = [2, 4, 6];
+const HIGHLIGHTER_WIDTHS = [16, 22, 30];
+const NEON_WIDTHS = [3, 5, 8];
 const ERASER_WIDTH = 24;
 const TEXT_FONT_SIZES = [16, 20, 24];
+
+function widthForTool(tool: Tool, index: number): number {
+  if (tool === "highlighter") return HIGHLIGHTER_WIDTHS[index];
+  if (tool === "neon") return NEON_WIDTHS[index];
+  return PEN_WIDTHS[index];
+}
 
 // --- Drawing helpers ---
 
@@ -194,16 +257,7 @@ function drawNotebookBackground(
   }
 }
 
-function drawStroke(ctx: CanvasRenderingContext2D, el: StrokeElement) {
-  if (el.points.length < 2) return;
-  ctx.save();
-  if (el.tool === "eraser") {
-    ctx.globalCompositeOperation = "destination-out";
-  }
-  ctx.strokeStyle = el.color;
-  ctx.lineWidth = el.width;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
+function tracePath(ctx: CanvasRenderingContext2D, el: StrokeElement) {
   ctx.beginPath();
   ctx.moveTo(el.points[0].x, el.points[0].y);
   for (let i = 1; i < el.points.length - 1; i++) {
@@ -213,7 +267,56 @@ function drawStroke(ctx: CanvasRenderingContext2D, el: StrokeElement) {
   }
   const last = el.points[el.points.length - 1];
   ctx.lineTo(last.x, last.y);
-  ctx.stroke();
+}
+
+function drawStroke(ctx: CanvasRenderingContext2D, el: StrokeElement) {
+  if (el.points.length < 2) return;
+  ctx.save();
+  ctx.lineJoin = "round";
+
+  if (el.tool === "eraser") {
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.strokeStyle = el.color;
+    ctx.lineWidth = el.width;
+    ctx.lineCap = "round";
+    tracePath(ctx, el);
+    ctx.stroke();
+  } else if (el.tool === "highlighter") {
+    // Translucent, flat caps, drawn atop existing strokes. Overlapping
+    // passes darken naturally thanks to alpha compositing, which is
+    // exactly how real highlighters behave on paper.
+    ctx.globalAlpha = 0.38;
+    ctx.strokeStyle = el.color;
+    ctx.lineWidth = el.width;
+    ctx.lineCap = "butt";
+    tracePath(ctx, el);
+    ctx.stroke();
+  } else if (el.tool === "neon") {
+    // Two passes produce the "glowing tube" look: a wide, blurred
+    // halo in the pen color, then a bright core on top.
+    ctx.lineCap = "round";
+    ctx.shadowColor = el.color;
+    ctx.shadowBlur = Math.max(8, el.width * 2.5);
+    ctx.strokeStyle = el.color;
+    ctx.lineWidth = el.width;
+    tracePath(ctx, el);
+    ctx.stroke();
+    // Re-stroke to intensify the glow
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.lineWidth = Math.max(1, el.width * 0.4);
+    ctx.stroke();
+  } else {
+    // Plain pen
+    ctx.strokeStyle = el.color;
+    ctx.lineWidth = el.width;
+    ctx.lineCap = "round";
+    tracePath(ctx, el);
+    ctx.stroke();
+  }
+
   ctx.restore();
 }
 
@@ -280,22 +383,30 @@ export type DiaryCanvasHandle = {
 // --- Component ---
 
 export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
-  function DiaryCanvas({ width = 800, height = 1131, onScaleChange, stampOverlay, onStampClick, stampCount, extraTapeIds, onTapePickerClick }, ref) {
+  function DiaryCanvas({ width = 800, height = 1131, onScaleChange, stampOverlay, onStampClick, stampCount, extraTapeIds, onTapePickerClick, onCanvasInteract, initialSnapshot, onChange, onToolChange }, ref) {
     const drawCanvasRef = useRef<HTMLCanvasElement>(null);
     const bgCanvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    const [tool, setTool] = useState<Tool>("pen");
-    const [penColor, setPenColor] = useState<PenColor>("black");
-    const [lineWidthIndex, setLineWidthIndex] = useState(1);
-    const [fontSizeIndex, setFontSizeIndex] = useState(1);
-    const [fontFamily, setFontFamily] = useState<FontId>("serif");
-    const [textAlign, setTextAlign] = useState<TextAlign>("left");
-    const [tapeId, setTapeId] = useState<TapeId>("check-rose");
-    const [background, setBackground] = useState<BackgroundType>("ruled");
+    // `initialSnapshot` is only honoured on first render — React's
+    // useState initializer is, too, so reads below give the exact
+    // semantics we want (hydrate once, then ignore).
+    // Default to the select tool so placed items can be tapped and
+    // moved right away; switching to pen/eraser/tape takes a single
+    // click in the toolbar.
+    const [tool, setTool] = useState<Tool>(initialSnapshot?.tool ?? "select");
+    const [penColor, setPenColor] = useState<PenColor>(() =>
+      normalizePenColor(initialSnapshot?.penColor)
+    );
+    const [lineWidthIndex, setLineWidthIndex] = useState(initialSnapshot?.lineWidthIndex ?? 1);
+    const [fontSizeIndex, setFontSizeIndex] = useState(initialSnapshot?.fontSizeIndex ?? 1);
+    const [fontFamily, setFontFamily] = useState<FontId>(initialSnapshot?.fontFamily ?? "serif");
+    const [textAlign, setTextAlign] = useState<TextAlign>(initialSnapshot?.textAlign ?? "left");
+    const [tapeId, setTapeId] = useState<TapeId>(initialSnapshot?.tapeId ?? "check-rose");
+    const [background, setBackground] = useState<BackgroundType>(initialSnapshot?.background ?? "ruled");
 
     const [history, dispatch] = useReducer(historyReducer, {
-      elements: [],
+      elements: initialSnapshot?.canvasElements ?? [],
       undone: [],
     });
     // Keep a ref in sync for use inside pointer event handlers (avoids stale closures)
@@ -309,12 +420,13 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
     const currentTapeRef = useRef<TapeElement | null>(null);
 
     // Text boxes (managed as objects, not baked into canvas)
-    const [textBoxes, setTextBoxes] = useState<TextBox[]>([]);
+    const [textBoxes, setTextBoxes] = useState<TextBox[]>(initialSnapshot?.textBoxes ?? []);
 
     const [scale, setScale] = useState(1);
 
-    const colorValue =
-      PEN_COLORS.find((c) => c.id === penColor)?.value ?? "#2C2C2C";
+    // penColor is already a hex string; kept as `colorValue` for the
+    // existing downstream consumers that expect that name.
+    const colorValue = penColor;
 
     // Scale to fit container
     useEffect(() => {
@@ -334,6 +446,25 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
       const ctx = bgCanvasRef.current?.getContext("2d");
       if (ctx) drawNotebookBackground(ctx, width, height, background);
     }, [width, height, background]);
+
+    // Emit snapshot whenever any persistable state changes. The
+    // parent typically debounces these to avoid hammering IDB while
+    // the user is dragging / typing.
+    useEffect(() => {
+      if (!onChange) return;
+      onChange({
+        canvasElements: history.elements,
+        textBoxes,
+        tool,
+        penColor,
+        lineWidthIndex,
+        fontSizeIndex,
+        fontFamily,
+        textAlign,
+        tapeId,
+        background,
+      });
+    }, [onChange, history.elements, textBoxes, tool, penColor, lineWidthIndex, fontSizeIndex, fontFamily, textAlign, tapeId, background]);
 
     // Redraw all elements
     const redraw = useCallback(() => {
@@ -359,8 +490,15 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
     };
 
     const handlePointerDown = (e: React.PointerEvent) => {
-      // Text tool is handled by TextBoxOverlay
-      if (tool === "text") return;
+      // Any interaction on the draw canvas itself clears overlay
+      // selections so clicking empty space deselects the current stamp
+      // / media / flipbook.
+      onCanvasInteract?.();
+
+      // Select tool does nothing on the canvas itself — placed items
+      // handle their own pointer events via the overlay. The text
+      // tool is likewise handled by TextBoxOverlay.
+      if (tool === "select" || tool === "text") return;
 
       if (tool === "tape") {
         e.preventDefault();
@@ -376,7 +514,14 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
         return;
       }
 
-      if (tool !== "pen" && tool !== "eraser") return;
+      if (
+        tool !== "pen" &&
+        tool !== "eraser" &&
+        tool !== "highlighter" &&
+        tool !== "neon"
+      ) {
+        return;
+      }
       e.preventDefault();
       drawCanvasRef.current?.setPointerCapture(e.pointerId);
       setIsDrawing(true);
@@ -385,7 +530,8 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
         type: "stroke",
         points: [pt],
         color: tool === "eraser" ? "#000" : colorValue,
-        width: tool === "eraser" ? ERASER_WIDTH : LINE_WIDTHS[lineWidthIndex],
+        width:
+          tool === "eraser" ? ERASER_WIDTH : widthForTool(tool, lineWidthIndex),
         tool,
       };
     };
@@ -554,6 +700,7 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
 
     const handleToolChange = (t: Tool) => {
       setTool(t);
+      onToolChange?.(t);
     };
 
     return (
@@ -611,7 +758,9 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
               width: width * scale,
               height: height * scale,
               cursor:
-                tool === "text"
+                tool === "select"
+                  ? "default"
+                  : tool === "text"
                   ? "text"
                   : tool === "eraser"
                   ? "cell"
@@ -624,10 +773,11 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
             onPointerLeave={handlePointerUp}
           />
 
-          {/* Stamp overlay — disable interaction when text tool is active */}
-          <div style={{ pointerEvents: tool === "text" ? "none" : "auto" }}>
-            {stampOverlay}
-          </div>
+          {/* Stamp / media / flipbook overlays. Each overlay's root is
+              pointer-events: none so empty space passes events through
+              to the draw canvas — only the placed items themselves
+              intercept pointer events. */}
+          {stampOverlay}
 
           {/* Text box overlay */}
           <TextBoxOverlay
