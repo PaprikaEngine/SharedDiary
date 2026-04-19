@@ -68,7 +68,12 @@ export function PageViewer({ entries, initialIndex, groupId, currentUserId, hasB
   // Canvas image is uploaded to `{group}/{entry}/canvas.png` — split it
   // from attached photos/videos so the handwritten page renders full-width
   // in its natural 4:3 aspect ratio.
-  const canvasMedia = sortedMedia.find((m) => m.type === "image" && m.url.endsWith("/canvas.png")) ?? null;
+  // Match against the path portion only — the storage URL may carry a
+  // query string (cache-bust, signed-URL token, etc.) and `endsWith` would
+  // miss those. Falling back to includes() catches both shapes.
+  const canvasMedia = sortedMedia.find(
+    (m) => m.type === "image" && (m.url.endsWith("/canvas.png") || m.url.includes("/canvas.png?"))
+  ) ?? null;
   const otherMedia = sortedMedia.filter((m) => m !== canvasMedia);
   // Media with a saved position are rendered as overlays on the canvas
   // (x/y/scale/rotation in 800×600 space). Legacy entries predate the
