@@ -132,7 +132,7 @@ export function TapePicker({ groupId, onClose, onTapeAdded, onTapeRemoved, curre
   };
 
   return (
-    <div className="card p-4 max-w-md">
+    <div className="card p-5 w-full max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-[14px] font-medium t-hi">マスキングテープを追加</h3>
         <button
@@ -158,14 +158,14 @@ export function TapePicker({ groupId, onClose, onTapeAdded, onTapeRemoved, curre
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-2 mb-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-4">
         {tapes.map((t) => {
           const def = TAPES[t.id];
           const canDelete = currentUserId && t.created_by === currentUserId;
           return (
             <div key={t.id} className="relative group">
               <div
-                className="w-full h-10 rounded border border-cream-dark"
+                className="w-full h-12 rounded border border-cream-dark"
                 style={{
                   backgroundImage: def?.tile ? `url(${def.tile.toDataURL()})` : undefined,
                   backgroundRepeat: "repeat",
@@ -173,7 +173,7 @@ export function TapePicker({ groupId, onClose, onTapeAdded, onTapeRemoved, curre
                 }}
                 title={t.name}
               />
-              <p className="text-[10px] t-md mt-1 truncate" title={t.name}>{t.name}</p>
+              <p className="text-[11px] t-md mt-1.5 truncate" title={t.name}>{t.name}</p>
               {canDelete && (
                 <button
                   type="button"
@@ -191,24 +191,24 @@ export function TapePicker({ groupId, onClose, onTapeAdded, onTapeRemoved, curre
         })}
 
         {!loading && tapes.length === 0 && (
-          <p className="col-span-3 text-[12px] t-lo py-2 text-center">
+          <p className="col-span-full text-[12px] t-lo py-2 text-center">
             まだテープがありません
           </p>
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={() => fileRef.current?.click()}
-        disabled={uploading}
-        className="btn btn-ghost btn-sm btn-block"
-      >
-        {uploading ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-        {uploading ? "アップロード中..." : "テープ画像を選ぶ"}
-      </button>
-      <p className="meta-sm mt-2 text-center">
-        横長の画像 (推奨 256×40px 程度) が綺麗に repeat します
-      </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <p className="meta-sm">横長の画像が綺麗に repeat します (推奨 256×40px 程度)</p>
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="btn btn-ghost btn-sm shrink-0"
+        >
+          {uploading ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+          {uploading ? "アップロード中..." : "テープ画像を選ぶ"}
+        </button>
+      </div>
 
       <input
         ref={fileRef}
