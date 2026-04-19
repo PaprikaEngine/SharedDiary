@@ -93,6 +93,7 @@ export default function NewEntryPage() {
   const canvasRef = useRef<DiaryCanvasHandle>(null);
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
   const stampPickerRef = useRef<HTMLDivElement>(null);
+  const tapePickerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const supabase = createClient();
 
@@ -102,6 +103,11 @@ export default function NewEntryPage() {
     if (!showStampPicker) return;
     stampPickerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [showStampPicker]);
+
+  useEffect(() => {
+    if (!showTapePicker) return;
+    tapePickerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [showTapePicker]);
 
   useEffect(() => {
     let mounted = true;
@@ -446,7 +452,7 @@ export default function NewEntryPage() {
               </div>
             )}
             {showTapePicker && (
-              <div className="mt-3 scroll-mt-20">
+              <div ref={tapePickerRef} className="mt-3 scroll-mt-20">
                 <TapePicker
                   groupId={groupId}
                   currentUserId={currentUserId}
