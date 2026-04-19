@@ -101,10 +101,11 @@ export default async function GroupsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 reveal reveal-2">
             {groups.map((group) => (
-              <Link key={group.id} href={`/groups/${group.id}`} className="card group flex flex-col min-h-[210px] overflow-hidden">
-                {/* Cover — image if uploaded, else book icon on paper-alt */}
+              <Link key={group.id} href={`/groups/${group.id}`} className="card group flex flex-col overflow-hidden">
+                {/* Cover — use the canonical book-page aspect (800/1131)
+                    so an uploaded cover is shown whole, not cropped. */}
                 <div
-                  className="relative h-28 w-full overflow-hidden"
+                  className="relative w-full aspect-[800/1131] overflow-hidden"
                   style={{ background: "var(--paper-alt)" }}
                 >
                   {group.cover_image ? (
@@ -120,7 +121,7 @@ export default async function GroupsPage() {
                       className="absolute inset-0 flex items-center justify-center"
                       style={{ color: "var(--ink-3)" }}
                     >
-                      <BookOpen className="size-7" strokeWidth={1.4} />
+                      <BookOpen className="size-10" strokeWidth={1.4} />
                     </div>
                   )}
                   <span className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity t-lo">
