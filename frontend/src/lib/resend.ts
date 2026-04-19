@@ -1,6 +1,12 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy: instantiating at module load breaks `next build` page-data
+// collection when RESEND_API_KEY is not set in the build environment.
+let _resend: Resend | null = null;
+function resend(): Resend {
+  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
+  return _resend;
+}
 
 /** Escape HTML special characters to prevent XSS in email templates */
 export function escapeHtml(str: string): string {
@@ -28,7 +34,7 @@ export async function sendBatonEmail({
   const safeGroup = escapeHtml(groupName);
   const safeUrl = encodeURI(groupUrl);
 
-  return resend.emails.send({
+  return resend().emails.send({
     from,
     to,
     subject: `${safeGroup} — バトンが届きました!`,
