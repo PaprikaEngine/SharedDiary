@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, Loader2, LogOut, Shuffle, SkipForward } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { MoreHorizontal, Loader2, LogOut, Shuffle, SkipForward, User } from "lucide-react";
 
 type Member = {
   id: string;
@@ -18,24 +19,29 @@ type Props = {
   isOwner: boolean;
   hasBaton: boolean;
   currentHolderId: string | null;
+  currentUserDisplayName: string | null;
   members: Member[];
 };
 
-type Mode = "menu" | "leave" | "reassign" | "skip";
+type Mode = "menu" | "leave" | "reassign" | "skip" | "self-name";
 
-export function GroupMenu({ groupId, currentUserId, isOwner, hasBaton, currentHolderId, members }: Props) {
+export function GroupMenu({ groupId, currentUserId, isOwner, hasBaton, currentHolderId, currentUserDisplayName, members }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("menu");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
+  // Per-group display name the current user wants shown. Empty string
+  // means "clear the override and fall back to the global name".
+  const [selfNameDraft, setSelfNameDraft] = useState(currentUserDisplayName ?? "");
 
   const reset = () => {
     setMode("menu");
     setBusy(false);
     setError(null);
     setSelectedMember(null);
+    setSelfNameDraft(currentUserDisplayName ?? "");
   };
 
   const close = () => {
@@ -68,6 +74,24 @@ export function GroupMenu({ groupId, currentUserId, isOwner, hasBaton, currentHo
       p_new_holder_id: targetId,
     });
     if (rpcError) { setError(rpcError.message); setBusy(false); return; }
+    close();
+    router.refresh();
+  };
+
+  const runSelfName = async () => {
+    const trimmed = selfNameDraft.trim();
+    const next = trimmed === "" ? null : trimmed;
+    if (next === (currentUserDisplayName ?? null)) { close(); return; }
+    setBusy(true);
+    setError(null);
+    const supabase = createClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: updErr } = await (supabase as any)
+      .from("group_members")
+      .update({ display_name: next })
+      .eq("group_id", groupId)
+      .eq("user_id", currentUserId);
+    if (updErr) { setError(updErr.message); setBusy(false); return; }
     close();
     router.refresh();
   };
@@ -124,6 +148,19 @@ export function GroupMenu({ groupId, currentUserId, isOwner, hasBaton, currentHo
                     </div>
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => { setMode("self-name"); setSelfNameDraft(currentUserDisplayName ?? ""); }}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-left hover:bg-cream-dark/40 transition-colors"
+                >
+                  <User className="size-4 text-moss shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-ink">このグループでの表示名</p>
+                    <p className="text-xs text-ink-light/60">
+                      {currentUserDisplayName ? `現在: ${currentUserDisplayName}` : "プロフィールの名前を使用中"}
+                    </p>
+                  </div>
+                </button>
                 <button
                   type="button"
                   onClick={() => setMode("leave")}
@@ -186,6 +223,37 @@ export function GroupMenu({ groupId, currentUserId, isOwner, hasBaton, currentHo
                   className="bg-moss hover:bg-moss-dark text-white"
                 >
                   {busy ? <Loader2 className="size-4 animate-spin" /> : "スキップする"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+
+          {mode === "self-name" && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-base">このグループでの表示名</DialogTitle>
+                <DialogDescription>
+                  このグループでだけ使う表示名を設定できます。空欄にするとプロフィールの名前に戻ります。
+                </DialogDescription>
+              </DialogHeader>
+              <Input
+                type="text"
+                value={selfNameDraft}
+                onChange={(e) => setSelfNameDraft(e.target.value)}
+                maxLength={30}
+                placeholder="例: ともちゃん"
+                className="h-10"
+                autoFocus
+              />
+              {error && <p className="text-xs text-destructive">{error}</p>}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setMode("menu")} disabled={busy}>戻る</Button>
+                <Button
+                  onClick={runSelfName}
+                  disabled={busy || selfNameDraft.trim() === (currentUserDisplayName ?? "")}
+                  className="bg-moss hover:bg-moss-dark text-white"
+                >
+                  {busy ? <Loader2 className="size-4 animate-spin" /> : "保存する"}
                 </Button>
               </DialogFooter>
             </>

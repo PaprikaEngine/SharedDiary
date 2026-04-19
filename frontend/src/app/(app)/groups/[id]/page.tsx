@@ -69,6 +69,7 @@ export default async function GroupPage({ params }: Props) {
   let isOwner = true;
   let hasBaton = true;
   let currentUserId: string | null = null;
+  let currentUserDisplayName: string | null = null;
 
   type FlipbookRow = {
     fps: number; loop: boolean;
@@ -127,8 +128,9 @@ export default async function GroupPage({ params }: Props) {
       currentUserId = user.id;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: membershipData } = await (supabase as any).from("group_members").select("role").eq("group_id", id).eq("user_id", user.id).single();
+      const { data: membershipData } = await (supabase as any).from("group_members").select("role, display_name").eq("group_id", id).eq("user_id", user.id).single();
       if (!membershipData) notFound();
+      currentUserDisplayName = (membershipData as { display_name: string | null }).display_name ?? null;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: groupData } = await (supabase as any).from("groups").select(`*, current_holder:users!groups_current_baton_holder_id_fkey(id, name, avatar_url)`).eq("id", id).single();
@@ -302,6 +304,7 @@ export default async function GroupPage({ params }: Props) {
                 isOwner={isOwner}
                 hasBaton={hasBaton}
                 currentHolderId={group.current_baton_holder_id}
+                currentUserDisplayName={currentUserDisplayName}
                 members={
                   (members ?? [])
                     .map((m) => m.user)
