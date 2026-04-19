@@ -7,8 +7,8 @@ import imageCompression from "browser-image-compression";
 import { createClient } from "@/lib/supabase/client";
 import { validateVideo } from "@/lib/video-utils";
 import { triggerBatonNotification } from "@/lib/notifications";
-import { DiaryCanvas, DIARY_CANVAS_WIDTH, DIARY_CANVAS_HEIGHT } from "@/components/diary-canvas";
-import type { DiaryCanvasHandle } from "@/components/diary-canvas";
+import { DiaryCanvas, DIARY_CANVAS_WIDTH, DIARY_CANVAS_HEIGHT, TapePicker } from "@/components/diary-canvas";
+import type { DiaryCanvasHandle, TapeId } from "@/components/diary-canvas";
 import { StampPicker, StampOverlayEditor, MAX_STAMPS } from "@/components/stamps";
 import type { PlacedStamp } from "@/components/stamps";
 import { MediaOverlayEditor, type PlacedMedia } from "@/components/placed-media";
@@ -84,6 +84,9 @@ export default function NewEntryPage() {
   const [showFlipbookEditor, setShowFlipbookEditor] = useState(false);
   const [placedStamps, setPlacedStamps] = useState<PlacedStamp[]>([]);
   const [showStampPicker, setShowStampPicker] = useState(false);
+  const [showTapePicker, setShowTapePicker] = useState(false);
+  const [extraTapeIds, setExtraTapeIds] = useState<TapeId[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [canvasScale, setCanvasScale] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -105,6 +108,7 @@ export default function NewEntryPage() {
     const loadMembers = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || !mounted) return;
+      setCurrentUserId(user.id);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data } = await (supabase as any).from("group_members").select("user:users(id, name)").eq("group_id", groupId);
       if (data && mounted) {
@@ -117,6 +121,42 @@ export default function NewEntryPage() {
     };
     loadMembers();
     return () => { mounted = false; };
+  }, [groupId, supabase]);
+
+  // Pre-load group tapes once on mount so the toolbar shows them
+  // even before the picker is opened.
+  useEffect(() => {
+    let cancelled = false;
+    const loadGroupTapes = async () => {
+      const { loadTapeFromUrl, registerTape, TAPES } = await import("@/components/diary-canvas/tape-patterns");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase as any)
+        .from("tapes")
+        .select("id, name, image_url")
+        .eq("scope", "group")
+        .eq("group_id", groupId);
+      if (!data || cancelled) return;
+      const ids: string[] = [];
+      for (const r of data as { id: string; name: string; image_url: string }[]) {
+        if (TAPES[r.id]) {
+          ids.push(r.id);
+          continue;
+        }
+        const def = await loadTapeFromUrl({
+          id: r.id,
+          label: r.name,
+          url: r.image_url,
+          scope: "group",
+        });
+        if (def) {
+          registerTape(def);
+          ids.push(def.id);
+        }
+      }
+      if (!cancelled) setExtraTapeIds(ids);
+    };
+    loadGroupTapes();
+    return () => { cancelled = true; };
   }, [groupId, supabase]);
 
   // Stagger successive placements so pieces don't stack exactly on top
@@ -330,6 +370,8 @@ export default function NewEntryPage() {
               onScaleChange={setCanvasScale}
               onStampClick={() => setShowStampPicker((v) => !v)}
               stampCount={placedStamps.length}
+              extraTapeIds={extraTapeIds}
+              onTapePickerClick={() => setShowTapePicker((v) => !v)}
               stampOverlay={
                 <>
                   {placedMedia.length > 0 && (
@@ -400,6 +442,21 @@ export default function NewEntryPage() {
                     });
                   }}
                   onClose={() => setShowStampPicker(false)}
+                />
+              </div>
+            )}
+            {showTapePicker && (
+              <div className="mt-3 scroll-mt-20">
+                <TapePicker
+                  groupId={groupId}
+                  currentUserId={currentUserId}
+                  onClose={() => setShowTapePicker(false)}
+                  onTapeAdded={(id) =>
+                    setExtraTapeIds((prev) => (prev.includes(id) ? prev : [...prev, id]))
+                  }
+                  onTapeRemoved={(id) =>
+                    setExtraTapeIds((prev) => prev.filter((x) => x !== id))
+                  }
                 />
               </div>
             )}

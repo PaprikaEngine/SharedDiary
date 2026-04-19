@@ -2,7 +2,7 @@
 
 import { PEN_COLORS, BACKGROUND_OPTIONS, type BackgroundType } from "./diary-canvas";
 import { FONT_OPTIONS, type FontId, type TextAlign } from "./text-box-overlay";
-import { TAPES, TAPE_IDS, type TapeId } from "./tape-patterns";
+import { TAPES, BUILTIN_TAPE_IDS, type TapeId } from "./tape-patterns";
 
 export type Tool = "pen" | "eraser" | "text" | "tape";
 export type PenColor = "black" | "blue" | "red" | "green" | "orange" | "purple";
@@ -22,6 +22,10 @@ type Props = {
   onTextAlignChange: (align: TextAlign) => void;
   tapeId: TapeId;
   onTapeIdChange: (id: TapeId) => void;
+  /** Extra (group-uploaded) tape IDs to show after the built-ins. */
+  extraTapeIds?: TapeId[];
+  /** Opens the upload / management picker for group tapes. */
+  onTapePickerClick?: () => void;
   background: BackgroundType;
   onBackgroundChange: (bg: BackgroundType) => void;
   canUndo: boolean;
@@ -51,6 +55,8 @@ export function CanvasToolbar({
   onTextAlignChange,
   tapeId,
   onTapeIdChange,
+  extraTapeIds = [],
+  onTapePickerClick,
   background,
   onBackgroundChange,
   canUndo,
@@ -154,10 +160,11 @@ export function CanvasToolbar({
 
       {/* Per-tool secondary controls */}
       {tool === "tape" ? (
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-xs text-ink-light mr-1">テープ</span>
-          {TAPE_IDS.map((id) => {
+          {[...BUILTIN_TAPE_IDS, ...extraTapeIds].map((id) => {
             const t = TAPES[id];
+            if (!t) return null;
             return (
               <button
                 key={id}
@@ -174,13 +181,24 @@ export function CanvasToolbar({
                   backgroundImage: t.tile ? `url(${t.tile.toDataURL()})` : undefined,
                   backgroundColor: t.preview,
                   backgroundRepeat: "repeat",
-                  backgroundSize: "16px 16px",
+                  backgroundSize: "auto 100%",
                 }}
                 title={t.label}
                 aria-label={t.label}
               />
             );
           })}
+          {onTapePickerClick && (
+            <button
+              type="button"
+              onClick={onTapePickerClick}
+              className="w-9 h-6 rounded-sm border border-dashed border-cream-dark text-ink-light/50 hover:border-moss/40 hover:text-moss transition-colors flex items-center justify-center"
+              title="マスキングテープを追加"
+              aria-label="マスキングテープを追加"
+            >
+              +
+            </button>
+          )}
         </div>
       ) : tool === "text" ? (
         <>

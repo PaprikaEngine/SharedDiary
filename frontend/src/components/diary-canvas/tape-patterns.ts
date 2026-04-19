@@ -1,20 +1,11 @@
-// Default masking-tape patterns.
+// Masking-tape patterns.
 //
-// Each tape is rendered by repeating a small offscreen tile via
-// CanvasPattern. We generate the tiles at module load (once per browser
-// session) so that the editor and exporter share the exact same image —
-// no asset files needed for the built-in 6.
-//
-// Phase 2 will let groups upload custom tape images; that flow plugs in
-// here by appending entries to TAPES with a real <img> as the source.
+// Built-in tapes are generated client-side as offscreen-canvas tiles
+// (no asset files needed). Group-uploaded tapes are rasterised from
+// the user image into the same tile shape so drawTape() can treat
+// every tape the same way.
 
-export type TapeId =
-  | "check-rose"
-  | "check-mint"
-  | "check-mustard"
-  | "plain-rose"
-  | "plain-mint"
-  | "plain-mustard";
+export type TapeId = string;
 
 export type TapeDef = {
   id: TapeId;
@@ -25,6 +16,8 @@ export type TapeDef = {
   tile: HTMLCanvasElement | null;
   /** Hex preview color shown in the picker before the tile is generated. */
   preview: string;
+  /** "builtin" or "group" — used by the picker to group entries. */
+  scope: "builtin" | "group";
 };
 
 const TILE_SIZE = 32;
@@ -103,13 +96,14 @@ function drawPlainTile(color: string): HTMLCanvasElement | null {
   return c;
 }
 
-export const TAPES: Record<TapeId, TapeDef> = {
+const BUILTIN_TAPES: Record<TapeId, TapeDef> = {
   "check-rose": {
     id: "check-rose",
     label: "チェック (薔薇)",
     width: TAPE_WIDTH,
     tile: drawCheckTile(COLORS.rose),
     preview: COLORS.rose,
+    scope: "builtin",
   },
   "check-mint": {
     id: "check-mint",
@@ -117,6 +111,7 @@ export const TAPES: Record<TapeId, TapeDef> = {
     width: TAPE_WIDTH,
     tile: drawCheckTile(COLORS.mint),
     preview: COLORS.mint,
+    scope: "builtin",
   },
   "check-mustard": {
     id: "check-mustard",
@@ -124,6 +119,7 @@ export const TAPES: Record<TapeId, TapeDef> = {
     width: TAPE_WIDTH,
     tile: drawCheckTile(COLORS.mustard),
     preview: COLORS.mustard,
+    scope: "builtin",
   },
   "plain-rose": {
     id: "plain-rose",
@@ -131,6 +127,7 @@ export const TAPES: Record<TapeId, TapeDef> = {
     width: TAPE_WIDTH,
     tile: drawPlainTile(COLORS.rose),
     preview: COLORS.rose,
+    scope: "builtin",
   },
   "plain-mint": {
     id: "plain-mint",
@@ -138,6 +135,7 @@ export const TAPES: Record<TapeId, TapeDef> = {
     width: TAPE_WIDTH,
     tile: drawPlainTile(COLORS.mint),
     preview: COLORS.mint,
+    scope: "builtin",
   },
   "plain-mustard": {
     id: "plain-mustard",
@@ -145,17 +143,86 @@ export const TAPES: Record<TapeId, TapeDef> = {
     width: TAPE_WIDTH,
     tile: drawPlainTile(COLORS.mustard),
     preview: COLORS.mustard,
+    scope: "builtin",
   },
 };
 
-export const TAPE_IDS: TapeId[] = [
-  "check-rose",
-  "check-mint",
-  "check-mustard",
-  "plain-rose",
-  "plain-mint",
-  "plain-mustard",
-];
+// Mutable registry: built-ins always present, group-uploaded tapes are
+// added at runtime once the editor loads them. drawTape() looks up
+// every tape here, so registering a new tape immediately makes it
+// renderable without prop drilling.
+export const TAPES: Record<TapeId, TapeDef> = { ...BUILTIN_TAPES };
+
+export const BUILTIN_TAPE_IDS: TapeId[] = Object.keys(BUILTIN_TAPES);
 
 /** Default tape opacity — paper-tape feel without obscuring the page. */
 export const TAPE_ALPHA = 0.85;
+
+/** Hard limits on rasterised tape width so a tall portrait upload
+ *  doesn't produce a 200px-wide block of tape. */
+export const MIN_TAPE_WIDTH = 24;
+export const MAX_TAPE_WIDTH = 64;
+
+/**
+ * Build a TapeDef from an image URL. The image is normalised to a
+ * canvas tile whose height equals the chosen tape width, repeated
+ * horizontally to cover the tape strip. Resolves to null on load
+ * failure (caller should skip / log).
+ */
+export function loadTapeFromUrl(opts: {
+  id: TapeId;
+  label: string;
+  url: string;
+  scope?: "builtin" | "group";
+}): Promise<TapeDef | null> {
+  return new Promise((resolve) => {
+    if (typeof document === "undefined") {
+      resolve(null);
+      return;
+    }
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const naturalH = img.naturalHeight || TAPE_WIDTH;
+      const naturalW = img.naturalWidth || TAPE_WIDTH;
+      const width = Math.min(MAX_TAPE_WIDTH, Math.max(MIN_TAPE_WIDTH, naturalH));
+      const tileW = Math.max(1, Math.round((naturalW / naturalH) * width));
+      const tile = makeCanvas(Math.max(width, tileW));
+      if (!tile) {
+        resolve(null);
+        return;
+      }
+      // Force tile to width × tileW (image stretched to that frame),
+      // then drawImage normalises height to `width`.
+      tile.width = tileW;
+      tile.height = width;
+      const ctx = tile.getContext("2d");
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, tileW, width);
+      resolve({
+        id: opts.id,
+        label: opts.label,
+        width,
+        tile,
+        preview: "#999",
+        scope: opts.scope ?? "group",
+      });
+    };
+    img.onerror = () => resolve(null);
+    img.src = opts.url;
+  });
+}
+
+/** Add a TapeDef to the runtime registry. Idempotent. */
+export function registerTape(def: TapeDef) {
+  TAPES[def.id] = def;
+}
+
+/** Remove a TapeDef from the runtime registry. */
+export function unregisterTape(id: TapeId) {
+  if (BUILTIN_TAPES[id]) return; // never drop built-ins
+  delete TAPES[id];
+}

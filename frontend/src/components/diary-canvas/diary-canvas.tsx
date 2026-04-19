@@ -50,6 +50,10 @@ type Props = {
   stampOverlay?: React.ReactNode;
   onStampClick?: () => void;
   stampCount?: number;
+  /** Extra tape IDs (group-uploaded) to show in the tape selector. */
+  extraTapeIds?: TapeId[];
+  /** Opens the upload / management UI for group tapes. */
+  onTapePickerClick?: () => void;
 };
 
 // --- History reducer ---
@@ -276,7 +280,7 @@ export type DiaryCanvasHandle = {
 // --- Component ---
 
 export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
-  function DiaryCanvas({ width = 800, height = 1131, onScaleChange, stampOverlay, onStampClick, stampCount }, ref) {
+  function DiaryCanvas({ width = 800, height = 1131, onScaleChange, stampOverlay, onStampClick, stampCount, extraTapeIds, onTapePickerClick }, ref) {
     const drawCanvasRef = useRef<HTMLCanvasElement>(null);
     const bgCanvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -569,6 +573,8 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
           onTextAlignChange={setTextAlign}
           tapeId={tapeId}
           onTapeIdChange={setTapeId}
+          extraTapeIds={extraTapeIds}
+          onTapePickerClick={onTapePickerClick}
           background={background}
           onBackgroundChange={setBackground}
           canUndo={history.elements.length > 0}
