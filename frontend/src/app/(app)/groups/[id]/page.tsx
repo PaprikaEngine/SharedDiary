@@ -135,8 +135,13 @@ export default async function GroupPage({ params }: Props) {
 
       // Lazy baton expiry: advance the baton if the deadline has passed.
       // Runs before fetching group state so we always see the latest holder.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).rpc("check_and_advance_expired_baton", { p_group_id: id }).catch(() => {/* best-effort */});
+      // Wrapped in its own try/catch — PostgrestBuilder doesn't implement
+      // `.catch()`, so a chained `.catch()` throws synchronously and gets
+      // swallowed by the outer catch below (falling back to demo data).
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).rpc("check_and_advance_expired_baton", { p_group_id: id });
+      } catch {/* best-effort */}
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: groupData } = await (supabase as any).from("groups").select(`*, current_holder:users!groups_current_baton_holder_id_fkey(id, name, avatar_url)`).eq("id", id).single();
