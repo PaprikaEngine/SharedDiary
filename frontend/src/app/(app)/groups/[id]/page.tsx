@@ -375,6 +375,17 @@ export default async function GroupPage({ params }: Props) {
           hasBaton={hasBaton}
           isOwner={isOwner}
           totalCount={entries.length}
+          batonStatus={
+            group.current_holder
+              ? {
+                  holderName: group.current_holder.name,
+                  holderAvatar: group.current_holder.avatar_url,
+                  deadlineText,
+                  deadlineColor,
+                  nextInOrderName: nextInOrder?.name ?? null,
+                }
+              : null
+          }
         />
       </main>
     </div>

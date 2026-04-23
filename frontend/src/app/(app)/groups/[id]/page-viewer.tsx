@@ -44,6 +44,15 @@ type EntryData = {
   } | null;
 };
 
+type BatonStatus = {
+  holderName: string;
+  holderAvatar: string | null;
+  deadlineText: string | null;
+  /** CSS color string — red when overdue / <24h left. */
+  deadlineColor: string | undefined;
+  nextInOrderName: string | null;
+};
+
 type Props = {
   entries: EntryData[];
   initialIndex: number;
@@ -55,9 +64,13 @@ type Props = {
   hasBaton: boolean;
   isOwner: boolean;
   totalCount: number;
+  /** Group-level baton state — shown as a subtle status bar above the
+   *  current page, so the user always knows whose turn it is even when
+   *  flipping through old entries. */
+  batonStatus: BatonStatus | null;
 };
 
-export function PageViewer({ entries, initialIndex, groupId, groupName, coverImage, currentUserId, hasBaton, isOwner, totalCount }: Props) {
+export function PageViewer({ entries, initialIndex, groupId, groupName, coverImage, currentUserId, hasBaton, isOwner, totalCount, batonStatus }: Props) {
   const router = useRouter();
   const [index, setIndex] = useState(initialIndex);
   const [direction, setDirection] = useState<"left" | "right" | null>(null);
@@ -308,19 +321,22 @@ export function PageViewer({ entries, initialIndex, groupId, groupName, coverIma
 
   if (!entry) {
     return (
-      <div className="paper-plain rounded-xl p-10 text-center">
-        <p className="text-3xl mb-2">✏️</p>
-        <p className="text-ink-light text-sm">
-          {hasBaton ? "あなたの番です！最初のページを書きましょう" : "まだページがありません"}
-        </p>
-        {hasBaton && (
-          <Link href={`/groups/${groupId}/new`}
-            className="inline-block mt-4 text-sm font-medium text-white bg-moss hover:bg-moss-dark rounded-full px-4 py-2 transition-colors"
-          >
-            日記を書く
-          </Link>
-        )}
-      </div>
+      <>
+        {batonStatus && <BatonStatusBar status={batonStatus} hasBaton={hasBaton} />}
+        <div className="paper-plain rounded-xl p-10 text-center">
+          <p className="text-3xl mb-2">✏️</p>
+          <p className="text-ink-light text-sm">
+            {hasBaton ? "あなたの番です！最初のページを書きましょう" : "まだページがありません"}
+          </p>
+          {hasBaton && (
+            <Link href={`/groups/${groupId}/new`}
+              className="inline-block mt-4 text-sm font-medium text-white bg-moss hover:bg-moss-dark rounded-full px-4 py-2 transition-colors"
+            >
+              日記を書く
+            </Link>
+          )}
+        </div>
+      </>
     );
   }
 
@@ -330,6 +346,8 @@ export function PageViewer({ entries, initialIndex, groupId, groupName, coverIma
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
+      {batonStatus && <BatonStatusBar status={batonStatus} hasBaton={hasBaton} />}
+
       {/* Page — size to content (matches the 4:3 canvas written on /new).
           When the entry has a handwritten canvas we render the notebook
           background as SVG inside the canvas box, so the paper article
@@ -531,6 +549,40 @@ export function PageViewer({ entries, initialIndex, groupId, groupName, coverIma
           次のページ <ChevronRight className="size-4" />
         </button>
       </div>
+    </div>
+  );
+}
+
+function BatonStatusBar({ status, hasBaton }: { status: BatonStatus; hasBaton: boolean }) {
+  return (
+    <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-cream-dark/30 border border-cream-dark/40">
+      <span className="size-6 rounded-full bg-moss/15 text-moss text-[11px] font-bold flex items-center justify-center shrink-0 overflow-hidden">
+        {status.holderAvatar ? (
+          // Not using next/image — the avatar URL set isn't whitelisted
+          // in next.config and this is a tiny inline avatar.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={status.holderAvatar} alt="" className="w-full h-full object-cover" />
+        ) : (
+          status.holderName.charAt(0)
+        )}
+      </span>
+      <span className="text-xs text-ink-light flex-1 min-w-0 truncate">
+        今は
+        <span className={`font-medium ml-0.5 ${hasBaton ? "text-moss" : "text-ink"}`}>
+          {hasBaton ? "あなた" : status.holderName}
+        </span>
+        <span className="ml-0.5">の番</span>
+      </span>
+      {status.deadlineText && (
+        <span className="text-xs shrink-0" style={{ color: status.deadlineColor }}>
+          {status.deadlineText}
+        </span>
+      )}
+      {status.nextInOrderName && (
+        <span className="text-[11px] text-ink-light/50 shrink-0 hidden sm:inline">
+          → 次: {status.nextInOrderName}
+        </span>
+      )}
     </div>
   );
 }
