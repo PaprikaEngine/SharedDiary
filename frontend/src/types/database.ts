@@ -73,18 +73,21 @@ export interface Database {
           user_id: string;
           role: "owner" | "member";
           joined_at: string;
+          member_order: number | null;
         };
         Insert: {
           group_id: string;
           user_id: string;
           role?: "owner" | "member";
           joined_at?: string;
+          member_order?: number | null;
         };
         Update: {
           group_id?: string;
           user_id?: string;
           role?: "owner" | "member";
           joined_at?: string;
+          member_order?: number | null;
         };
       };
       group_invitations: {

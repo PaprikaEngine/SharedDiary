@@ -1,5 +1,6 @@
 export { DiaryCanvas } from "./diary-canvas";
-export type { DiaryCanvasHandle, BackgroundType } from "./diary-canvas";
+export type { DiaryCanvasHandle, BackgroundType, DiarySnapshot } from "./diary-canvas";
+export type { Tool } from "./canvas-toolbar";
 export { CanvasBackground } from "./canvas-background";
 export { TapePicker } from "./tape-picker";
 export type { TapeId } from "./tape-patterns";

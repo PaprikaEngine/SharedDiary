@@ -8,9 +8,10 @@ import { useRef, useCallback } from "react";
 export type PlacedMedia = {
   instanceId: string;
   type: "image" | "video";
-  // Upload state
-  file?: File;              // while composing /new — not set once uploaded
-  previewUrl: string;       // blob URL or final R2 URL
+  previewUrl: string;       // R2 public URL (uploaded at paste time)
+  /** R2 object key, retained so the composer can delete the file if
+   *  the user removes the item before submitting. */
+  uploadedPath: string;
   // Positioning (canvas-space coordinates, 800×600)
   x: number;                // center x
   y: number;                // center y
@@ -18,6 +19,11 @@ export type PlacedMedia = {
   rotation: number;         // degrees
   baseWidth: number;        // natural display width before scale
   baseHeight: number;       // natural display height before scale
+  /** Render order against other placed items (media / flipbook /
+   *  stamps). Higher = in front. Assigned from a shared counter that
+   *  bumps on add and on select. Not persisted — only used during
+   *  composition. */
+  z: number;
 };
 
 type Props = {
@@ -27,6 +33,9 @@ type Props = {
   onSelect: () => void;
   onUpdate: (updates: Partial<Pick<PlacedMedia, "x" | "y" | "scale" | "rotation">>) => void;
   onDelete: () => void;
+  /** When false, the item passes pointer events through so a drawing
+   *  tool on the canvas below can draw over it. */
+  interactive?: boolean;
 };
 
 export function DraggableMedia({
@@ -36,6 +45,7 @@ export function DraggableMedia({
   onSelect,
   onUpdate,
   onDelete,
+  interactive = true,
 }: Props) {
   const dragStartRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
 
@@ -93,9 +103,10 @@ export function DraggableMedia({
         width: displayWidth,
         height: displayHeight,
         transform: `rotate(${media.rotation}deg)`,
-        zIndex: selected ? 20 : 10,
+        zIndex: media.z,
         cursor: "grab",
         touchAction: "none",
+        pointerEvents: interactive ? "auto" : "none",
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

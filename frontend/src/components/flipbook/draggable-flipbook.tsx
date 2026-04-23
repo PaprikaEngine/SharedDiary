@@ -16,6 +16,11 @@ export type PlacedFlipbook = {
   /** First frame as a data URL, used as a static preview in the editor.
    *  Null while the flipbook has no frames yet. */
   previewDataUrl: string | null;
+  /** Render order against other placed items (media / flipbook /
+   *  stamps). Higher = in front. Assigned from a shared counter that
+   *  bumps on add and on select. Not persisted — only used during
+   *  composition. */
+  z: number;
 };
 
 type Props = {
@@ -26,6 +31,9 @@ type Props = {
   onUpdate: (updates: Partial<Pick<PlacedFlipbook, "x" | "y" | "scale" | "rotation">>) => void;
   onEdit: () => void;
   onDelete: () => void;
+  /** When false, the flipbook passes pointer events through so a
+   *  drawing tool on the canvas below can draw over it. */
+  interactive?: boolean;
 };
 
 export function DraggableFlipbook({
@@ -36,6 +44,7 @@ export function DraggableFlipbook({
   onUpdate,
   onEdit,
   onDelete,
+  interactive = true,
 }: Props) {
   const dragStartRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
 
@@ -89,9 +98,10 @@ export function DraggableFlipbook({
         width: displayWidth,
         height: displayHeight,
         transform: `rotate(${flipbook.rotation}deg)`,
-        zIndex: selected ? 20 : 10,
+        zIndex: flipbook.z,
         cursor: "grab",
         touchAction: "none",
+        pointerEvents: interactive ? "auto" : "none",
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

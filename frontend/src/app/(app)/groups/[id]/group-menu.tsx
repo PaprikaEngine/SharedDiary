@@ -6,11 +6,12 @@ import { createClient } from "@/lib/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MoreHorizontal, Loader2, LogOut, Shuffle, SkipForward, User } from "lucide-react";
+import { MoreHorizontal, Loader2, LogOut, ArrowUp, ArrowDown, SkipForward, User } from "lucide-react";
 
 type Member = {
   id: string;
   name: string;
+  memberOrder?: number;
 };
 
 type Props = {
@@ -18,29 +19,26 @@ type Props = {
   currentUserId: string;
   isOwner: boolean;
   hasBaton: boolean;
-  currentHolderId: string | null;
   currentUserDisplayName: string | null;
   members: Member[];
 };
 
-type Mode = "menu" | "leave" | "reassign" | "skip" | "self-name";
+type Mode = "menu" | "leave" | "reorder" | "skip" | "self-name";
 
-export function GroupMenu({ groupId, currentUserId, isOwner, hasBaton, currentHolderId, currentUserDisplayName, members }: Props) {
+export function GroupMenu({ groupId, currentUserId, isOwner, hasBaton, currentUserDisplayName, members }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("menu");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedMember, setSelectedMember] = useState<string | null>(null);
-  // Per-group display name the current user wants shown. Empty string
-  // means "clear the override and fall back to the global name".
+  const [reorderList, setReorderList] = useState<Member[]>([]);
   const [selfNameDraft, setSelfNameDraft] = useState(currentUserDisplayName ?? "");
 
   const reset = () => {
     setMode("menu");
     setBusy(false);
     setError(null);
-    setSelectedMember(null);
+    setReorderList([]);
     setSelfNameDraft(currentUserDisplayName ?? "");
   };
 
@@ -51,7 +49,6 @@ export function GroupMenu({ groupId, currentUserId, isOwner, hasBaton, currentHo
   };
 
   const others = members.filter((m) => m.id !== currentUserId);
-  const othersExcludingHolder = members.filter((m) => m.id !== currentHolderId);
 
   const runLeave = async () => {
     setBusy(true);
@@ -64,14 +61,25 @@ export function GroupMenu({ groupId, currentUserId, isOwner, hasBaton, currentHo
     router.refresh();
   };
 
-  const runPassBaton = async (targetId: string) => {
+  const runSkip = async () => {
     setBusy(true);
     setError(null);
     const supabase = createClient();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: rpcError } = await (supabase as any).rpc("pass_baton", {
+    const { error: rpcError } = await (supabase as any).rpc("advance_baton_in_order", { p_group_id: groupId });
+    if (rpcError) { setError(rpcError.message); setBusy(false); return; }
+    close();
+    router.refresh();
+  };
+
+  const runReorderSequence = async () => {
+    setBusy(true);
+    setError(null);
+    const supabase = createClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: rpcError } = await (supabase as any).rpc("reorder_baton_sequence", {
       p_group_id: groupId,
-      p_new_holder_id: targetId,
+      p_ordered_user_ids: reorderList.map((m) => m.id),
     });
     if (rpcError) { setError(rpcError.message); setBusy(false); return; }
     close();
@@ -96,10 +104,26 @@ export function GroupMenu({ groupId, currentUserId, isOwner, hasBaton, currentHo
     router.refresh();
   };
 
-  // Owner can reassign any time; the current baton holder can skip their own turn.
-  // Either case needs at least one other member to hand off to.
-  const canReassign = isOwner && othersExcludingHolder.length > 0;
+  const canReorder = isOwner && members.length > 1;
   const canSkip = hasBaton && others.length > 0;
+
+  const moveUp = (index: number) => {
+    if (index === 0) return;
+    setReorderList((prev) => {
+      const next = [...prev];
+      [next[index - 1], next[index]] = [next[index], next[index - 1]];
+      return next;
+    });
+  };
+
+  const moveDown = (index: number) => {
+    setReorderList((prev) => {
+      if (index === prev.length - 1) return prev;
+      const next = [...prev];
+      [next[index], next[index + 1]] = [next[index + 1], next[index]];
+      return next;
+    });
+  };
 
   return (
     <>
@@ -122,23 +146,27 @@ export function GroupMenu({ groupId, currentUserId, isOwner, hasBaton, currentHo
                 <DialogDescription>バトンの操作やグループからの離脱ができます</DialogDescription>
               </DialogHeader>
               <div className="flex flex-col gap-1 -mx-2">
-                {canReassign && (
+                {canReorder && (
                   <button
                     type="button"
-                    onClick={() => { setMode("reassign"); setSelectedMember(othersExcludingHolder[0]?.id ?? null); }}
+                    onClick={() => {
+                      const sorted = [...members].sort((a, b) => (a.memberOrder ?? 0) - (b.memberOrder ?? 0));
+                      setReorderList(sorted);
+                      setMode("reorder");
+                    }}
                     className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-left hover:bg-cream-dark/40 transition-colors"
                   >
-                    <Shuffle className="size-4 text-moss shrink-0" />
+                    <ArrowUp className="size-4 text-moss shrink-0" />
                     <div className="flex-1">
                       <p className="text-sm font-medium text-ink">バトンの順番を変更</p>
-                      <p className="text-xs text-ink-light/60">次に書く人を選び直します</p>
+                      <p className="text-xs text-ink-light/60">書く順番を並べ替えます</p>
                     </div>
                   </button>
                 )}
                 {canSkip && (
                   <button
                     type="button"
-                    onClick={() => { setMode("skip"); setSelectedMember(others[0]?.id ?? null); }}
+                    onClick={() => setMode("skip")}
                     className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-left hover:bg-cream-dark/40 transition-colors"
                   >
                     <SkipForward className="size-4 text-moss shrink-0" />
@@ -178,26 +206,45 @@ export function GroupMenu({ groupId, currentUserId, isOwner, hasBaton, currentHo
             </>
           )}
 
-          {mode === "reassign" && (
+          {mode === "reorder" && (
             <>
               <DialogHeader>
-                <DialogTitle className="text-base">バトンを渡す相手を選ぶ</DialogTitle>
-                <DialogDescription>新しくバトンを持つ人を選んでください</DialogDescription>
+                <DialogTitle className="text-base">バトンの順番を変更</DialogTitle>
+                <DialogDescription>上下の矢印で書く順番を並べ替えてください</DialogDescription>
               </DialogHeader>
-              <MemberPicker
-                members={othersExcludingHolder}
-                selected={selectedMember}
-                onSelect={setSelectedMember}
-              />
+              <div className="flex flex-col gap-1">
+                {reorderList.map((m, i) => (
+                  <div key={m.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-cream-dark/30">
+                    <span className="w-5 text-center text-xs text-ink-light/50 shrink-0">{i + 1}</span>
+                    <span className="flex-1 text-sm text-ink">{m.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => moveUp(i)}
+                      disabled={i === 0}
+                      className="p-1 rounded hover:bg-cream-dark transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+                    >
+                      <ArrowUp className="size-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveDown(i)}
+                      disabled={i === reorderList.length - 1}
+                      className="p-1 rounded hover:bg-cream-dark transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+                    >
+                      <ArrowDown className="size-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
               {error && <p className="text-xs text-destructive">{error}</p>}
               <DialogFooter>
                 <Button variant="outline" onClick={() => setMode("menu")} disabled={busy}>戻る</Button>
                 <Button
-                  onClick={() => selectedMember && runPassBaton(selectedMember)}
-                  disabled={busy || !selectedMember}
+                  onClick={runReorderSequence}
+                  disabled={busy}
                   className="bg-moss hover:bg-moss-dark text-white"
                 >
-                  {busy ? <Loader2 className="size-4 animate-spin" /> : "バトンを渡す"}
+                  {busy ? <Loader2 className="size-4 animate-spin" /> : "保存する"}
                 </Button>
               </DialogFooter>
             </>
@@ -207,19 +254,14 @@ export function GroupMenu({ groupId, currentUserId, isOwner, hasBaton, currentHo
             <>
               <DialogHeader>
                 <DialogTitle className="text-base">今回はスキップ</DialogTitle>
-                <DialogDescription>書かずに次の人にバトンを渡します</DialogDescription>
+                <DialogDescription>書かずに次の順番の人にバトンを渡します。よろしいですか？</DialogDescription>
               </DialogHeader>
-              <MemberPicker
-                members={others}
-                selected={selectedMember}
-                onSelect={setSelectedMember}
-              />
               {error && <p className="text-xs text-destructive">{error}</p>}
               <DialogFooter>
                 <Button variant="outline" onClick={() => setMode("menu")} disabled={busy}>戻る</Button>
                 <Button
-                  onClick={() => selectedMember && runPassBaton(selectedMember)}
-                  disabled={busy || !selectedMember}
+                  onClick={runSkip}
+                  disabled={busy}
                   className="bg-moss hover:bg-moss-dark text-white"
                 >
                   {busy ? <Loader2 className="size-4 animate-spin" /> : "スキップする"}
@@ -285,37 +327,5 @@ export function GroupMenu({ groupId, currentUserId, isOwner, hasBaton, currentHo
         </DialogContent>
       </Dialog>
     </>
-  );
-}
-
-function MemberPicker({
-  members,
-  selected,
-  onSelect,
-}: {
-  members: Member[];
-  selected: string | null;
-  onSelect: (id: string) => void;
-}) {
-  if (members.length === 0) {
-    return <p className="text-xs text-ink-light">他にメンバーがいません</p>;
-  }
-  return (
-    <div className="flex flex-wrap gap-2">
-      {members.map((m) => (
-        <button
-          key={m.id}
-          type="button"
-          onClick={() => onSelect(m.id)}
-          className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-            selected === m.id
-              ? "bg-moss text-white"
-              : "bg-cream-dark/60 text-ink-light hover:bg-cream-dark"
-          }`}
-        >
-          {m.name}
-        </button>
-      ))}
-    </div>
   );
 }

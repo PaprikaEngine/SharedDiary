@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import imageCompression from "browser-image-compression";
-import { Plus, Loader2, X, Trash2 } from "lucide-react";
+import { Loader2, X, Trash2, Upload, AlertCircle } from "lucide-react";
 import { TAPES, loadTapeFromUrl, registerTape, unregisterTape, type TapeId } from "./tape-patterns";
 
 type TapeRow = {
@@ -24,11 +24,17 @@ type Props = {
   currentUserId: string | null;
 };
 
+const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+
 export function TapePicker({ groupId, onClose, onTapeAdded, onTapeRemoved, currentUserId }: Props) {
   const [tapes, setTapes] = useState<TapeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Inline delete confirmation — native confirm() is too jarring for this
+  // craft-tray aesthetic. Holds the id of the tape pending delete.
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
 
@@ -64,19 +70,14 @@ export function TapePicker({ groupId, onClose, onTapeAdded, onTapeRemoved, curre
 
   useEffect(() => { load(); }, [load]);
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (fileRef.current) fileRef.current.value = "";
+  const ingestFile = async (file: File) => {
     setError(null);
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setError("PNG / JPEG / WebP / GIF のみ対応しています");
+      return;
+    }
     setUploading(true);
     try {
-      const allowed = ["image/png", "image/jpeg", "image/webp", "image/gif"];
-      if (!allowed.includes(file.type)) {
-        setError("PNG / JPEG / WebP / GIF のみ対応しています");
-        return;
-      }
-
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setError("ログインが必要です"); return; }
 
@@ -121,8 +122,28 @@ export function TapePicker({ groupId, onClose, onTapeAdded, onTapeRemoved, curre
     }
   };
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (fileRef.current) fileRef.current.value = "";
+    if (file) await ingestFile(file);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) await ingestFile(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = () => setDragOver(false);
+
   const handleDelete = async (id: string) => {
-    if (!confirm("このテープを削除しますか?")) return;
+    setPendingDelete(null);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error: delErr } = await (supabase as any).from("tapes").delete().eq("id", id);
     if (delErr) { setError(delErr.message); return; }
@@ -131,92 +152,203 @@ export function TapePicker({ groupId, onClose, onTapeAdded, onTapeRemoved, curre
     await load();
   };
 
+  const isEmpty = !loading && tapes.length === 0;
+
   return (
-    <div className="card p-5 w-full max-w-2xl mx-auto">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-[14px] font-medium t-hi">マスキングテープを追加</h3>
+    <div className="card w-full max-w-[800px] mx-auto overflow-hidden">
+      {/* Header — editorial craft mark + count + close */}
+      <header className="flex items-center justify-between px-5 sm:px-6 py-4 border-b rule-hair">
+        <div className="flex items-center gap-3 min-w-0">
+          {/* Tiny tape glyph — gives the panel a craft mark without
+              adding a real icon. Diagonal strip echoes a piece of tape. */}
+          <span
+            className="inline-block size-2.5 rounded-[2px] shrink-0"
+            style={{
+              background: "var(--signal)",
+              transform: "rotate(-18deg)",
+              boxShadow: "0 0 0 3px var(--signal-soft)",
+            }}
+            aria-hidden
+          />
+          <h3 className="text-[14.5px] font-medium tracking-tight t-hi">
+            マスキングテープ
+          </h3>
+          <span className="meta-sm hidden sm:inline">{tapes.length} in collection</span>
+        </div>
         <button
           type="button"
           onClick={onClose}
-          className="t-lo hover:t-hi"
+          className="t-lo hover:t-hi transition-colors -mr-1 p-1"
           aria-label="閉じる"
         >
-          <X className="size-4" />
+          <X className="size-4" strokeWidth={1.6} />
         </button>
-      </div>
+      </header>
 
       {error && (
         <div
-          className="mb-3 text-[12.5px] px-3 py-2 rounded border"
+          className="flex items-start gap-2 px-5 sm:px-6 py-3 border-b rule-hair text-[12.5px]"
           style={{
-            borderColor: "var(--danger)",
             color: "var(--danger)",
             background: "var(--danger-soft)",
           }}
+          role="alert"
         >
-          {error}
+          <AlertCircle className="size-4 mt-0.5 shrink-0" strokeWidth={1.6} />
+          <span>{error}</span>
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-4">
-        {tapes.map((t) => {
-          const def = TAPES[t.id];
-          const canDelete = currentUserId && t.created_by === currentUserId;
-          return (
-            <div key={t.id} className="relative group">
-              <div
-                className="w-full h-12 rounded border border-cream-dark"
-                style={{
-                  backgroundImage: def?.tile ? `url(${def.tile.toDataURL()})` : undefined,
-                  backgroundRepeat: "repeat",
-                  backgroundSize: "auto 100%",
-                }}
-                title={t.name}
-              />
-              <p className="text-[11px] t-md mt-1.5 truncate" title={t.name}>{t.name}</p>
-              {canDelete && (
-                <button
-                  type="button"
-                  onClick={() => handleDelete(t.id)}
-                  className="absolute -top-1.5 -right-1.5 size-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                  style={{ background: "var(--ink)", color: "var(--paper)" }}
-                  title="削除"
-                  aria-label="削除"
-                >
-                  <Trash2 className="size-3" />
-                </button>
+      {/* Tape rack — each row is a horizontal strip so the texture reads
+          like real tape. Empty state collapses the rack and lets the
+          dropzone below carry the conversation. */}
+      {!isEmpty && (
+        <ul className="divide-y rule-hair" style={{ borderColor: "var(--stroke)" }}>
+          {tapes.map((t) => {
+            const def = TAPES[t.id];
+            const canDelete = !!currentUserId && t.created_by === currentUserId;
+            const isPending = pendingDelete === t.id;
+
+            return (
+              <li
+                key={t.id}
+                className="flex items-center gap-4 px-5 sm:px-6 py-3 transition-colors"
+                style={{ background: isPending ? "var(--danger-soft)" : undefined }}
+              >
+                {/* Tape strip swatch — fills the row so the user can
+                    see the actual on-page proportions. */}
+                <div
+                  className="flex-1 min-w-0 h-9 sm:h-10 rounded-[3px]"
+                  style={{
+                    backgroundImage: def?.tile ? `url(${def.tile.toDataURL()})` : undefined,
+                    backgroundColor: "var(--paper-alt)",
+                    backgroundRepeat: "repeat",
+                    backgroundSize: "auto 100%",
+                    boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.04)",
+                  }}
+                  title={t.name}
+                />
+
+                <div className="flex flex-col gap-0.5 min-w-[80px] max-w-[40%]">
+                  <span className="text-[12.5px] font-medium t-hi truncate" title={t.name}>
+                    {t.name}
+                  </span>
+                  {!canDelete && (
+                    <span className="meta-sm">グループ共有</span>
+                  )}
+                </div>
+
+                {canDelete && (
+                  isPending ? (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setPendingDelete(null)}
+                        className="text-[12px] t-md hover:t-hi px-2 py-1"
+                      >
+                        やめる
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(t.id)}
+                        className="text-[12px] font-medium px-2.5 py-1 rounded-[6px]"
+                        style={{
+                          background: "var(--danger)",
+                          color: "var(--paper)",
+                        }}
+                      >
+                        削除する
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete(t.id)}
+                      className="t-lo hover:opacity-100 opacity-50 hover:text-[var(--danger)] transition-all p-1.5 -m-1.5 shrink-0"
+                      title="削除"
+                      aria-label={`${t.name} を削除`}
+                    >
+                      <Trash2 className="size-4" strokeWidth={1.5} />
+                    </button>
+                  )
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {loading && (
+        <div className="px-5 sm:px-6 py-6 flex items-center justify-center">
+          <Loader2 className="size-4 animate-spin" style={{ color: "var(--ink-3)" }} />
+        </div>
+      )}
+
+      {/* Dropzone CTA — the primary action. Real drag-and-drop, not just
+          a button. Larger / more inviting on empty state. */}
+      <div
+        className="px-5 sm:px-6 pt-4 pb-5"
+        style={{ background: "var(--paper-alt)" }}
+      >
+        <label
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className="block rounded-[10px] cursor-pointer transition-all"
+          style={{
+            border: `1.5px dashed ${dragOver ? "var(--accent)" : "var(--stroke-strong)"}`,
+            background: dragOver ? "var(--accent-soft)" : "var(--paper)",
+            padding: isEmpty ? "32px 20px" : "22px 20px",
+          }}
+        >
+          <input
+            ref={fileRef}
+            type="file"
+            accept={ALLOWED_TYPES.join(",")}
+            onChange={handleFileChange}
+            className="hidden"
+            disabled={uploading}
+          />
+          <div className="flex flex-col items-center gap-2.5 text-center">
+            <div
+              className="size-10 rounded-full flex items-center justify-center"
+              style={{
+                background: dragOver ? "var(--accent)" : "var(--paper-alt)",
+                color: dragOver ? "var(--paper)" : "var(--ink-2)",
+                transition: "background 160ms ease, color 160ms ease",
+              }}
+            >
+              {uploading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Upload className="size-4" strokeWidth={1.6} />
               )}
             </div>
-          );
-        })}
-
-        {!loading && tapes.length === 0 && (
-          <p className="col-span-full text-[12px] t-lo py-2 text-center">
-            まだテープがありません
-          </p>
-        )}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[14px] font-medium t-hi">
+                {uploading
+                  ? "アップロード中..."
+                  : dragOver
+                  ? "ここに置いて離す"
+                  : isEmpty
+                  ? "最初のテープを追加する"
+                  : "新しいテープを追加する"}
+              </span>
+              <span className="meta-sm">
+                ドラッグ&ドロップ・タップで選択 &nbsp;·&nbsp; 横長 256×40 推奨
+              </span>
+            </div>
+          </div>
+        </label>
       </div>
 
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <p className="meta-sm">横長の画像が綺麗に repeat します (推奨 256×40px 程度)</p>
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          disabled={uploading}
-          className="btn btn-ghost btn-sm shrink-0"
-        >
-          {uploading ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-          {uploading ? "アップロード中..." : "テープ画像を選ぶ"}
-        </button>
-      </div>
-
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
-        onChange={handleUpload}
-        className="hidden"
-      />
+      {/* Footer rule reinforcing where the tape will appear */}
+      <footer
+        className="px-5 sm:px-6 py-2.5 border-t rule-hair flex items-center justify-between"
+      >
+        <span className="meta-sm">PNG / JPEG / WebP / GIF</span>
+        <span className="meta-sm">グループ全員が使えます</span>
+      </footer>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import imageCompression from "browser-image-compression";
@@ -8,13 +8,14 @@ import { createClient } from "@/lib/supabase/client";
 import { validateVideo } from "@/lib/video-utils";
 import { triggerBatonNotification } from "@/lib/notifications";
 import { DiaryCanvas, DIARY_CANVAS_WIDTH, DIARY_CANVAS_HEIGHT, TapePicker } from "@/components/diary-canvas";
-import type { DiaryCanvasHandle, TapeId } from "@/components/diary-canvas";
+import type { DiaryCanvasHandle, TapeId, DiarySnapshot, Tool } from "@/components/diary-canvas";
 import { StampPicker, StampOverlayEditor, MAX_STAMPS } from "@/components/stamps";
 import type { PlacedStamp } from "@/components/stamps";
 import { MediaOverlayEditor, type PlacedMedia } from "@/components/placed-media";
 import { FlipbookEditor, type FlipbookData, DraggableFlipbook, type PlacedFlipbook } from "@/components/flipbook";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ImagePlus, Film, BookOpen, Loader2 } from "lucide-react";
+import { saveDraft, loadDraft, clearDraft, type Draft } from "@/lib/draft-storage";
 
 // Center of the A4 canvas — new items drop here by default.
 const CANVAS_CENTER_X = DIARY_CANVAS_WIDTH / 2;
@@ -73,10 +74,9 @@ export default function NewEntryPage() {
   const [placedMedia, setPlacedMedia] = useState<PlacedMedia[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [nextBatonHolder, setNextBatonHolder] = useState<string | null>(null);
-  // `members` excludes the current user — you can't pass the baton to
-  // yourself, that would break the whole exchange-diary concept.
-  const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
+  // All members in baton rotation order (including the current user).
+  // Next holder is derived from this list automatically.
+  const [allMembersOrdered, setAllMembersOrdered] = useState<{ id: string; name: string; memberOrder: number | null }[]>([]);
   const [membersLoaded, setMembersLoaded] = useState(false);
   const [flipbookData, setFlipbookData] = useState<FlipbookData | null>(null);
   const [flipbookPlacement, setFlipbookPlacement] = useState<PlacedFlipbook | null>(null);
@@ -88,6 +88,87 @@ export default function NewEntryPage() {
   const [extraTapeIds, setExtraTapeIds] = useState<TapeId[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [canvasScale, setCanvasScale] = useState(1);
+  // Selection is lifted to the page so a click on the draw canvas can
+  // clear whichever overlay item was selected, and so the shared
+  // z-counter below can bump the selected item to the front regardless
+  // of its type (media / flipbook / stamp).
+  const [selectedStampId, setSelectedStampId] = useState<string | null>(null);
+  const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
+  // Shared render-order counter. Each placed item stores its own `z`;
+  // on add and on select we bump the counter and assign the new value
+  // so the item jumps in front of everything. Starts at a base that's
+  // safely above the draw canvas's (implicit) zero.
+  const zCounterRef = useRef(10);
+  const nextZ = useCallback(() => ++zCounterRef.current, []);
+
+  // Mirror of the DiaryCanvas's internal tool so we can disable
+  // overlay interactivity while a drawing tool is active — placed
+  // items should pass pointer events through to the draw canvas so
+  // pen / eraser / tape can draw over them.
+  const [currentTool, setCurrentTool] = useState<Tool>("select");
+  const overlaysInteractive = currentTool === "select";
+
+  // Draft persistence — the DiaryCanvas is only rendered once the
+  // initial IDB read has resolved so its `initialSnapshot` hydrates
+  // on first mount. `latestDiaryRef` tracks the most recent canvas
+  // state (fed via onChange) so the auto-save effect can read it
+  // without depending on it as a React state.
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [initialSnapshot, setInitialSnapshot] = useState<DiarySnapshot | undefined>(undefined);
+  const latestDiaryRef = useRef<DiarySnapshot | null>(null);
+  const [diaryVersion, setDiaryVersion] = useState(0);
+  const handleDiaryChange = useCallback((snap: DiarySnapshot) => {
+    latestDiaryRef.current = snap;
+    setDiaryVersion((v) => v + 1);
+  }, []);
+  const clearAllSelections = useCallback(() => {
+    setSelectedStampId(null);
+    setSelectedMediaId(null);
+    setFlipbookSelected(false);
+  }, []);
+
+  const handleToolChange = useCallback((t: Tool) => {
+    setCurrentTool(t);
+    // Leaving select mode hides the selection affordances, so also
+    // clear the underlying selection — otherwise the user comes
+    // back to a "phantom" selection the next time they switch back.
+    if (t !== "select") {
+      setSelectedStampId(null);
+      setSelectedMediaId(null);
+      setFlipbookSelected(false);
+    }
+  }, []);
+
+  // Selecting an item bumps it to the top of the shared z-order while
+  // also clearing selections on the other overlays — only one item can
+  // be selected at a time.
+  const handleSelectStamp = useCallback((id: string | null) => {
+    setSelectedStampId(id);
+    setSelectedMediaId(null);
+    setFlipbookSelected(false);
+    if (id) {
+      const z = nextZ();
+      setPlacedStamps((prev) => prev.map((s) => (s.instanceId === id ? { ...s, z } : s)));
+    }
+  }, [nextZ]);
+
+  const handleSelectMedia = useCallback((id: string | null) => {
+    setSelectedMediaId(id);
+    setSelectedStampId(null);
+    setFlipbookSelected(false);
+    if (id) {
+      const z = nextZ();
+      setPlacedMedia((prev) => prev.map((m) => (m.instanceId === id ? { ...m, z } : m)));
+    }
+  }, [nextZ]);
+
+  const handleSelectFlipbook = useCallback(() => {
+    setFlipbookSelected(true);
+    setSelectedStampId(null);
+    setSelectedMediaId(null);
+    const z = nextZ();
+    setFlipbookPlacement((prev) => (prev ? { ...prev, z } : prev));
+  }, [nextZ]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<DiaryCanvasHandle>(null);
@@ -116,12 +197,16 @@ export default function NewEntryPage() {
       if (!user || !mounted) return;
       setCurrentUserId(user.id);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data } = await (supabase as any).from("group_members").select("user:users(id, name)").eq("group_id", groupId);
+      const { data } = await (supabase as any)
+        .from("group_members")
+        .select("user:users(id, name), member_order")
+        .eq("group_id", groupId)
+        .order("member_order", { ascending: true });
       if (data && mounted) {
-        const list = (data as { user: { id: string; name: string } | null }[]).map((m) => m.user).filter((u): u is { id: string; name: string } => u !== null);
-        const others = list.filter((m) => m.id !== user.id);
-        setMembers(others);
-        setNextBatonHolder(others[0]?.id ?? null);
+        const list = (data as { user: { id: string; name: string } | null; member_order: number | null }[])
+          .filter((m) => m.user !== null)
+          .map((m) => ({ id: m.user!.id, name: m.user!.name, memberOrder: m.member_order }));
+        setAllMembersOrdered(list);
         setMembersLoaded(true);
       }
     };
@@ -129,41 +214,89 @@ export default function NewEntryPage() {
     return () => { mounted = false; };
   }, [groupId, supabase]);
 
-  // Pre-load group tapes once on mount so the toolbar shows them
-  // even before the picker is opened.
+  // Load group tapes (so their tiles are registered) and the saved
+  // draft (if any) before the canvas is revealed. Doing both in one
+  // effect lets a draft reference group tapes without the canvas
+  // hitting a missing-tile placeholder.
   useEffect(() => {
     let cancelled = false;
-    const loadGroupTapes = async () => {
+    (async () => {
+      // Group tapes — register tiles, populate picker
       const { loadTapeFromUrl, registerTape, TAPES } = await import("@/components/diary-canvas/tape-patterns");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data } = await (supabase as any)
+      const { data: tapeRows } = await (supabase as any)
         .from("tapes")
         .select("id, name, image_url")
         .eq("scope", "group")
         .eq("group_id", groupId);
-      if (!data || cancelled) return;
-      const ids: string[] = [];
-      for (const r of data as { id: string; name: string; image_url: string }[]) {
-        if (TAPES[r.id]) {
-          ids.push(r.id);
-          continue;
-        }
-        const def = await loadTapeFromUrl({
-          id: r.id,
-          label: r.name,
-          url: r.image_url,
-          scope: "group",
-        });
-        if (def) {
-          registerTape(def);
-          ids.push(def.id);
+      const tapeIds: string[] = [];
+      if (tapeRows) {
+        for (const r of tapeRows as { id: string; name: string; image_url: string }[]) {
+          if (TAPES[r.id]) { tapeIds.push(r.id); continue; }
+          const def = await loadTapeFromUrl({ id: r.id, label: r.name, url: r.image_url, scope: "group" });
+          if (def) { registerTape(def); tapeIds.push(def.id); }
         }
       }
-      if (!cancelled) setExtraTapeIds(ids);
-    };
-    loadGroupTapes();
+      if (cancelled) return;
+      setExtraTapeIds(tapeIds);
+
+      // Draft — hydrate page state + initialSnapshot for DiaryCanvas
+      const draft = await loadDraft(groupId);
+      if (cancelled) return;
+      if (draft) {
+        setInitialSnapshot(draft.diary);
+        setPlacedStamps(draft.placedStamps);
+        setPlacedMedia(
+          draft.placedMedia.map((m) => ({
+            instanceId: m.instanceId,
+            type: m.type,
+            previewUrl: m.url,
+            uploadedPath: m.path,
+            x: m.x, y: m.y, scale: m.scale, rotation: m.rotation,
+            baseWidth: m.baseWidth, baseHeight: m.baseHeight,
+            z: m.z,
+          }))
+        );
+        setFlipbookData(draft.flipbookData);
+        setFlipbookPlacement(draft.flipbookPlacement);
+        // Resume the z counter above everything already placed.
+        zCounterRef.current = Math.max(zCounterRef.current, draft.zCounter);
+      }
+      setDraftLoaded(true);
+    })();
     return () => { cancelled = true; };
   }, [groupId, supabase]);
+
+  // Auto-save on any persistable state change. Debounced at 1s so a
+  // continuous drag / typing session writes once rather than per
+  // render. Media bytes are NOT in the draft — files are uploaded to
+  // R2 at paste time, so we only persist their URLs.
+  useEffect(() => {
+    if (!draftLoaded) return;
+    const id = window.setTimeout(() => {
+      const diary = latestDiaryRef.current;
+      if (!diary) return;
+      const draft: Draft = {
+        savedAt: Date.now(),
+        diary,
+        placedStamps,
+        placedMedia: placedMedia.map((m) => ({
+          instanceId: m.instanceId,
+          type: m.type,
+          url: m.previewUrl,
+          path: m.uploadedPath,
+          x: m.x, y: m.y, scale: m.scale, rotation: m.rotation,
+          baseWidth: m.baseWidth, baseHeight: m.baseHeight,
+          z: m.z,
+        })),
+        flipbookData,
+        flipbookPlacement,
+        zCounter: zCounterRef.current,
+      };
+      saveDraft(groupId, draft);
+    }, 1000);
+    return () => window.clearTimeout(id);
+  }, [draftLoaded, diaryVersion, placedStamps, placedMedia, flipbookData, flipbookPlacement, groupId]);
 
   // Stagger successive placements so pieces don't stack exactly on top
   // of each other — offsets wrap around a small diagonal.
@@ -175,90 +308,137 @@ export default function NewEntryPage() {
   const countByType = (type: "image" | "video") =>
     placedMedia.filter((m) => m.type === type).length;
 
+  // Upload a single file to R2 at paste time so the draft only ever
+  // carries URLs. Returns the public URL + the R2 object key so the
+  // composer can delete the file later if the user removes the item.
+  const uploadMedia = useCallback(async (file: File | Blob, kind: "image" | "video", instanceId: string): Promise<{ url: string; path: string } | null> => {
+    const ext = (file instanceof File ? file.name.split(".").pop() : undefined) || (file.type.split("/")[1] ?? "bin");
+    const prefix = kind === "video" ? "video" : "image";
+    const path = `${groupId}/pending/${prefix}/${instanceId}.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from("media")
+      .upload(path, file, file.type ? { contentType: file.type } : undefined);
+    if (upErr) {
+      console.error("media upload failed:", upErr);
+      return null;
+    }
+    const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(path);
+    return { url: publicUrl, path };
+  }, [groupId, supabase]);
+
+  // Tracks in-flight uploads so the UI can show progress and the
+  // add buttons can disable themselves while busy.
+  const [uploadingCount, setUploadingCount] = useState(0);
+
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-    for (let i = 0; i < files.length; i++) {
-      if (countByType("image") + i >= MAX_IMAGES) break;
-      const file = files[i];
-      if (!file.type.startsWith("image/")) continue;
-      try {
-        const compressed = await imageCompression(file, { maxSizeMB: 2, maxWidthOrHeight: 1920, useWebWorker: true });
-        const { width, height } = await measureImage(compressed);
-        const previewUrl = URL.createObjectURL(compressed);
-        setPlacedMedia((prev) => {
-          if (prev.filter((m) => m.type === "image").length >= MAX_IMAGES) {
-            URL.revokeObjectURL(previewUrl);
-            return prev;
-          }
-          const { dx, dy } = placementOffset(prev.length);
-          const aspect = height / width;
-          return [
-            ...prev,
-            {
-              instanceId: crypto.randomUUID(),
-              type: "image",
-              file: compressed,
-              previewUrl,
-              x: CANVAS_CENTER_X + dx,
-              y: CANVAS_CENTER_Y + dy,
-              scale: 1,
-              rotation: 0,
-              baseWidth: MEDIA_BASE_WIDTH,
-              baseHeight: MEDIA_BASE_WIDTH * aspect,
-            },
-          ];
-        });
-      } catch (err) { console.error("Image processing failed:", err); }
-    }
+    const queued = Array.from(files).slice(0, Math.max(0, MAX_IMAGES - countByType("image")));
     if (fileInputRef.current) fileInputRef.current.value = "";
+    setUploadingCount((c) => c + queued.length);
+    try {
+      for (const file of queued) {
+        if (!file.type.startsWith("image/")) { setUploadingCount((c) => c - 1); continue; }
+        try {
+          const compressed = await imageCompression(file, { maxSizeMB: 2, maxWidthOrHeight: 1920, useWebWorker: true });
+          const { width, height } = await measureImage(compressed);
+          const instanceId = crypto.randomUUID();
+          const uploaded = await uploadMedia(compressed, "image", instanceId);
+          if (!uploaded) { setError("画像のアップロードに失敗しました"); continue; }
+          setPlacedMedia((prev) => {
+            if (prev.filter((m) => m.type === "image").length >= MAX_IMAGES) return prev;
+            const { dx, dy } = placementOffset(prev.length);
+            const aspect = height / width;
+            return [
+              ...prev,
+              {
+                instanceId,
+                type: "image",
+                previewUrl: uploaded.url,
+                uploadedPath: uploaded.path,
+                x: CANVAS_CENTER_X + dx,
+                y: CANVAS_CENTER_Y + dy,
+                scale: 1,
+                rotation: 0,
+                baseWidth: MEDIA_BASE_WIDTH,
+                baseHeight: MEDIA_BASE_WIDTH * aspect,
+                z: nextZ(),
+              },
+            ];
+          });
+        } catch (err) {
+          console.error("Image processing failed:", err);
+        } finally {
+          setUploadingCount((c) => c - 1);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleVideoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-    for (let i = 0; i < files.length; i++) {
-      if (countByType("video") + i >= MAX_VIDEOS) break;
-      const file = files[i];
-      const result = await validateVideo(file);
-      if (!result.valid) { setError(result.error); continue; }
-      try {
-        const { width, height } = await measureVideo(file);
-        const previewUrl = URL.createObjectURL(file);
-        setPlacedMedia((prev) => {
-          if (prev.filter((m) => m.type === "video").length >= MAX_VIDEOS) {
-            URL.revokeObjectURL(previewUrl);
-            return prev;
-          }
-          const { dx, dy } = placementOffset(prev.length);
-          const aspect = height / width;
-          return [
-            ...prev,
-            {
-              instanceId: crypto.randomUUID(),
-              type: "video",
-              file,
-              previewUrl,
-              x: CANVAS_CENTER_X + dx,
-              y: CANVAS_CENTER_Y + dy,
-              scale: 1,
-              rotation: 0,
-              baseWidth: MEDIA_BASE_WIDTH,
-              baseHeight: MEDIA_BASE_WIDTH * aspect,
-            },
-          ];
-        });
-      } catch (err) { console.error("Video processing failed:", err); }
-    }
+    const queued = Array.from(files).slice(0, Math.max(0, MAX_VIDEOS - countByType("video")));
     if (videoInputRef.current) videoInputRef.current.value = "";
+    setUploadingCount((c) => c + queued.length);
+    try {
+      for (const file of queued) {
+        try {
+          const result = await validateVideo(file);
+          if (!result.valid) { setError(result.error); continue; }
+          const { width, height } = await measureVideo(file);
+          const instanceId = crypto.randomUUID();
+          const uploaded = await uploadMedia(file, "video", instanceId);
+          if (!uploaded) { setError("動画のアップロードに失敗しました"); continue; }
+          setPlacedMedia((prev) => {
+            if (prev.filter((m) => m.type === "video").length >= MAX_VIDEOS) return prev;
+            const { dx, dy } = placementOffset(prev.length);
+            const aspect = height / width;
+            return [
+              ...prev,
+              {
+                instanceId,
+                type: "video",
+                previewUrl: uploaded.url,
+                uploadedPath: uploaded.path,
+                x: CANVAS_CENTER_X + dx,
+                y: CANVAS_CENTER_Y + dy,
+                scale: 1,
+                rotation: 0,
+                baseWidth: MEDIA_BASE_WIDTH,
+                baseHeight: MEDIA_BASE_WIDTH * aspect,
+                z: nextZ(),
+              },
+            ];
+          });
+        } catch (err) {
+          console.error("Video processing failed:", err);
+        } finally {
+          setUploadingCount((c) => c - 1);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
   };
+
+  // Derive the next baton holder from the ordered member list.
+  // Round-robin: find the current user's position, take the next one.
+  const orderedForNext = allMembersOrdered.filter((m) => m.memberOrder !== null);
+  const currentUserIndex = orderedForNext.findIndex((m) => m.id === currentUserId);
+  const nextHolder =
+    orderedForNext.length > 1 && currentUserIndex !== -1
+      ? orderedForNext[(currentUserIndex + 1) % orderedForNext.length]
+      : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     const canvasEmpty = canvasRef.current?.isEmpty() ?? true;
     if (canvasEmpty && placedMedia.length === 0 && placedStamps.length === 0 && !flipbookData) { setError("日記を書くか画像・動画・スタンプ・パラパラアニメを追加してください"); return; }
-    if (!nextBatonHolder) { setError("バトンを渡すメンバーがいません。先にグループに招待してください"); return; }
+    if (!nextHolder) { setError("バトンを渡すメンバーがいません。先にグループに招待してください"); return; }
     setLoading(true);
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -285,27 +465,18 @@ export default function NewEntryPage() {
       }
     }
 
-    // Upload each placed image/video, then record its canvas position
-    // so the viewer can render the overlay at the exact spot the author
-    // dropped it.
+    // Media files are already in R2 (uploaded at paste time). Just
+    // record each item's entry_media row pointing at its existing
+    // URL, preserving canvas position so the viewer can re-render
+    // the overlay.
     const mediaOrderStart = canvasEmpty ? 0 : 1;
     for (let i = 0; i < placedMedia.length; i++) {
       const m = placedMedia[i];
-      if (!m.file) continue;
-      const isVideo = m.type === "video";
-      const path = isVideo
-        ? `${groupId}/${entry.id}/video/${m.instanceId}`
-        : `${groupId}/${entry.id}/${m.instanceId}`;
-      const { error: upErr } = await supabase.storage
-        .from("media")
-        .upload(path, m.file, isVideo ? { contentType: m.file.type } : undefined);
-      if (upErr) { console.error(upErr); continue; }
-      const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(path);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any).from("entry_media").insert({
         entry_id: entry.id,
         type: m.type,
-        url: publicUrl,
+        url: m.previewUrl,
         order: mediaOrderStart + i,
         x: m.x,
         y: m.y,
@@ -345,9 +516,12 @@ export default function NewEntryPage() {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from("groups").update({ current_baton_holder_id: nextBatonHolder, baton_passed_at: new Date().toISOString() }).eq("id", groupId);
+    await (supabase as any).from("groups").update({ current_baton_holder_id: nextHolder.id, baton_passed_at: new Date().toISOString() }).eq("id", groupId);
     // Fire-and-forget notification
-    triggerBatonNotification(groupId, nextBatonHolder);
+    triggerBatonNotification(groupId, nextHolder.id);
+    // The entry is persisted — discard the local draft so the user
+    // gets a blank canvas next time they compose for this group.
+    await clearDraft(groupId);
     router.push(`/groups/${groupId}`);
     router.refresh();
   };
@@ -371,13 +545,29 @@ export default function NewEntryPage() {
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Canvas */}
           <div ref={canvasWrapperRef} className="relative scroll-mt-20">
+            {!draftLoaded && (
+              // Canvas is gated on the IDB read so initialSnapshot
+              // is available on first render. The read is usually
+              // sub-10ms so this skeleton rarely paints a full frame.
+              <div
+                style={{ aspectRatio: `${DIARY_CANVAS_WIDTH} / ${DIARY_CANVAS_HEIGHT}` }}
+                className="w-full max-w-[800px] mx-auto border border-cream-dark rounded-lg bg-white flex items-center justify-center"
+              >
+                <Loader2 className="size-5 animate-spin text-ink-light" />
+              </div>
+            )}
+            {draftLoaded && (
             <DiaryCanvas
               ref={canvasRef} width={DIARY_CANVAS_WIDTH} height={DIARY_CANVAS_HEIGHT}
               onScaleChange={setCanvasScale}
+              onCanvasInteract={clearAllSelections}
               onStampClick={() => setShowStampPicker((v) => !v)}
               stampCount={placedStamps.length}
               extraTapeIds={extraTapeIds}
               onTapePickerClick={() => setShowTapePicker((v) => !v)}
+              initialSnapshot={initialSnapshot}
+              onChange={handleDiaryChange}
+              onToolChange={handleToolChange}
               stampOverlay={
                 <>
                   {placedMedia.length > 0 && (
@@ -385,37 +575,54 @@ export default function NewEntryPage() {
                       media={placedMedia}
                       onMediaChange={setPlacedMedia}
                       canvasScale={canvasScale}
+                      selectedId={selectedMediaId}
+                      onSelect={handleSelectMedia}
+                      interactive={overlaysInteractive}
+                      onRemove={(item) => {
+                        // Media is uploaded at paste time — clean up R2
+                        // when the composer drops it. Fire-and-forget
+                        // because the UI already reflects the removal.
+                        supabase.storage.from("media").remove([item.uploadedPath]).then(
+                          undefined,
+                          (err) => console.warn("media cleanup failed:", err),
+                        );
+                      }}
                     />
                   )}
                   {flipbookPlacement && (
-                    <div
-                      className="absolute inset-0"
-                      style={{ zIndex: 4 }}
-                      onClick={() => setFlipbookSelected(false)}
-                    >
-                      <DraggableFlipbook
-                        flipbook={flipbookPlacement}
-                        canvasScale={canvasScale}
-                        selected={flipbookSelected}
-                        onSelect={() => setFlipbookSelected(true)}
-                        onUpdate={(updates) =>
-                          setFlipbookPlacement((prev) => (prev ? { ...prev, ...updates } : prev))
-                        }
-                        onEdit={() => setShowFlipbookEditor(true)}
-                        onDelete={() => {
-                          setFlipbookPlacement(null);
-                          setFlipbookData(null);
-                          setFlipbookSelected(false);
-                        }}
-                      />
-                    </div>
+                    <DraggableFlipbook
+                      flipbook={flipbookPlacement}
+                      canvasScale={canvasScale}
+                      selected={flipbookSelected}
+                      onSelect={handleSelectFlipbook}
+                      interactive={overlaysInteractive}
+                      onUpdate={(updates) =>
+                        setFlipbookPlacement((prev) => (prev ? { ...prev, ...updates } : prev))
+                      }
+                      onEdit={() => setShowFlipbookEditor(true)}
+                      onDelete={() => {
+                        setFlipbookPlacement(null);
+                        setFlipbookData(null);
+                        setFlipbookSelected(false);
+                      }}
+                    />
                   )}
                   {placedStamps.length > 0 && (
-                    <StampOverlayEditor stamps={placedStamps} onStampsChange={setPlacedStamps} canvasWidth={DIARY_CANVAS_WIDTH} canvasHeight={DIARY_CANVAS_HEIGHT} canvasScale={canvasScale} />
+                    <StampOverlayEditor
+                      stamps={placedStamps}
+                      onStampsChange={setPlacedStamps}
+                      canvasWidth={DIARY_CANVAS_WIDTH}
+                      canvasHeight={DIARY_CANVAS_HEIGHT}
+                      canvasScale={canvasScale}
+                      selectedId={selectedStampId}
+                      onSelect={handleSelectStamp}
+                      interactive={overlaysInteractive}
+                    />
                   )}
                 </>
               }
             />
+            )}
             {showStampPicker && (
               <div ref={stampPickerRef} className="mt-3 scroll-mt-20">
                 <StampPicker
@@ -432,6 +639,7 @@ export default function NewEntryPage() {
                         y: CANVAS_CENTER_Y,
                         scale: 1,
                         rotation: 0,
+                        z: nextZ(),
                       },
                     ]);
                     // Close + scroll back to the canvas so the user
@@ -480,24 +688,26 @@ export default function NewEntryPage() {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={countByType("image") >= MAX_IMAGES}
+                disabled={countByType("image") >= MAX_IMAGES || uploadingCount > 0}
                 className="flex-1 flex items-center justify-center gap-2 py-3 border border-dashed border-cream-dark rounded-lg text-xs text-ink-light hover:border-moss/40 hover:text-moss transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <ImagePlus className="size-4" />
+                {uploadingCount > 0 ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
                 写真を追加
               </button>
               <button
                 type="button"
                 onClick={() => videoInputRef.current?.click()}
-                disabled={countByType("video") >= MAX_VIDEOS}
+                disabled={countByType("video") >= MAX_VIDEOS || uploadingCount > 0}
                 className="flex-1 flex items-center justify-center gap-2 py-3 border border-dashed border-cream-dark rounded-lg text-xs text-ink-light hover:border-moss/40 hover:text-moss transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <Film className="size-4" />
+                {uploadingCount > 0 ? <Loader2 className="size-4 animate-spin" /> : <Film className="size-4" />}
                 動画を追加
               </button>
             </div>
             <p className="mt-2 text-[10px] text-ink-light/50">
-              ノートに貼った後、ドラッグで移動・選択中のボタンで拡大縮小や回転ができます
+              {uploadingCount > 0
+                ? `アップロード中... (${uploadingCount}件)`
+                : "ノートに貼った後、ドラッグで移動・選択中のボタンで拡大縮小や回転ができます"}
             </p>
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} className="hidden" />
             <input ref={videoInputRef} type="file" accept="video/mp4,video/webm" multiple onChange={handleVideoSelect} className="hidden" />
@@ -536,6 +746,7 @@ export default function NewEntryPage() {
                         baseWidth: FLIPBOOK_BASE_WIDTH,
                         baseHeight: FLIPBOOK_BASE_HEIGHT,
                         previewDataUrl: firstFrame,
+                        z: nextZ(),
                       }
                 );
                 setShowFlipbookEditor(false);
@@ -544,32 +755,24 @@ export default function NewEntryPage() {
             />
           )}
 
-          {/* Baton */}
+          {/* Baton — auto-determined by member_order sequence */}
           <div className="paper-plain rounded-xl p-4">
             <span className="block text-xs font-medium text-ink-light mb-2">次にバトンを渡す人</span>
             {!membersLoaded ? (
               <p className="text-xs text-ink-light/50">読み込み中...</p>
-            ) : members.length === 0 ? (
+            ) : !nextHolder ? (
               <p className="text-xs text-ink-light">
                 他にメンバーがいません。
                 <Link href={`/groups/${groupId}`} className="text-moss hover:underline ml-1">グループに招待</Link>
                 してからバトンを渡してください。
               </p>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {members.map((m) => (
-                  <button key={m.id} type="button" onClick={() => setNextBatonHolder(m.id)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${nextBatonHolder === m.id ? "bg-moss text-white" : "bg-cream-dark/60 text-ink-light hover:bg-cream-dark"}`}
-                  >
-                    {m.name}
-                  </button>
-                ))}
-              </div>
+              <p className="text-sm text-ink">→ {nextHolder.name}</p>
             )}
           </div>
 
           {/* Submit */}
-          <Button type="submit" disabled={loading || !nextBatonHolder} className="w-full h-11 bg-moss hover:bg-moss-dark text-base rounded-xl">
+          <Button type="submit" disabled={loading || !nextHolder} className="w-full h-11 bg-moss hover:bg-moss-dark text-base rounded-xl">
             {loading ? <Loader2 className="size-4 animate-spin" /> : "日記を投稿してバトンを渡す"}
           </Button>
         </form>

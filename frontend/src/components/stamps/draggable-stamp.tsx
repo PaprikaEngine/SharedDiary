@@ -11,6 +11,11 @@ export type PlacedStamp = {
   y: number;
   scale: number;
   rotation: number;
+  /** Render order against other placed items (media / flipbook /
+   *  stamps). Higher = in front. Assigned from a shared counter that
+   *  bumps on add and on select. Not persisted — only used during
+   *  composition. */
+  z: number;
 };
 
 type Props = {
@@ -20,6 +25,10 @@ type Props = {
   onSelect: () => void;
   onUpdate: (updates: Partial<Pick<PlacedStamp, "x" | "y" | "scale" | "rotation">>) => void;
   onDelete: () => void;
+  /** When false, the stamp passes pointer events through so a
+   *  drawing tool on the canvas below can draw over it. Parents
+   *  flip this based on the current tool. */
+  interactive?: boolean;
 };
 
 const STAMP_BASE_SIZE = 64;
@@ -31,6 +40,7 @@ export function DraggableStamp({
   onSelect,
   onUpdate,
   onDelete,
+  interactive = true,
 }: Props) {
   const dragStartRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
 
@@ -86,9 +96,10 @@ export function DraggableStamp({
         width: displaySize,
         height: displaySize,
         transform: `rotate(${stamp.rotation}deg)`,
-        zIndex: selected ? 20 : 10,
+        zIndex: stamp.z,
         cursor: "grab",
         touchAction: "none",
+        pointerEvents: interactive ? "auto" : "none",
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

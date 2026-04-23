@@ -32,6 +32,7 @@ export default async function GroupPage({ params }: Props) {
   };
   type Member = {
     role: "owner" | "member";
+    member_order: number | null;
     user: { id: string; name: string; avatar_url: string | null } | null;
   };
   type EntryRow = {
@@ -63,8 +64,8 @@ export default async function GroupPage({ params }: Props) {
     baton_passed_at: new Date().toISOString(),
   };
   let members: Member[] | null = [
-    { role: "owner", user: { id: "1", name: "あなた", avatar_url: null } },
-    { role: "member", user: { id: "2", name: "ともだち", avatar_url: null } },
+    { role: "owner", member_order: 0, user: { id: "1", name: "あなた", avatar_url: null } },
+    { role: "member", member_order: 1, user: { id: "2", name: "ともだち", avatar_url: null } },
   ];
   let isOwner = true;
   let hasBaton = true;
@@ -132,13 +133,19 @@ export default async function GroupPage({ params }: Props) {
       if (!membershipData) notFound();
       currentUserDisplayName = (membershipData as { display_name: string | null }).display_name ?? null;
 
+      // Lazy baton expiry: advance the baton if the deadline has passed.
+      // Runs before fetching group state so we always see the latest holder.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).rpc("check_and_advance_expired_baton", { p_group_id: id }).catch(() => {/* best-effort */});
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: groupData } = await (supabase as any).from("groups").select(`*, current_holder:users!groups_current_baton_holder_id_fkey(id, name, avatar_url)`).eq("id", id).single();
       if (!groupData) notFound();
       group = groupData as Group;
 
+      // Fetch members ordered by member_order so nextInOrder is derivable
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: membersData } = await (supabase as any).from("group_members").select(`role, user:users(id, name, avatar_url)`).eq("group_id", id);
+      const { data: membersData } = await (supabase as any).from("group_members").select(`role, member_order, user:users(id, name, avatar_url)`).eq("group_id", id).order("member_order", { ascending: true });
       members = membersData as Member[] | null;
 
       // Fetch entries (newest first). Avoid PostgREST embedded selects —
@@ -217,14 +224,36 @@ export default async function GroupPage({ params }: Props) {
   // Baton deadline calculation
   const deadlineDays = group.baton_deadline_days;
   const passedAt = group.baton_passed_at ? new Date(group.baton_passed_at) : null;
+  let hoursLeft: number | null = null;
   let daysLeft: number | null = null;
   let isOverdue = false;
   if (passedAt && deadlineDays > 0) {
     const deadline = new Date(passedAt.getTime() + deadlineDays * 86400000);
     const now = new Date();
-    daysLeft = Math.ceil((deadline.getTime() - now.getTime()) / 86400000);
-    isOverdue = daysLeft < 0;
+    const msLeft = deadline.getTime() - now.getTime();
+    hoursLeft = msLeft / 3600000;
+    daysLeft = Math.ceil(hoursLeft / 24);
+    isOverdue = hoursLeft < 0;
   }
+  const within24h = hoursLeft !== null && hoursLeft >= 0 && hoursLeft < 24;
+  const deadlineColor = isOverdue || within24h ? "var(--danger)" : undefined;
+  const deadlineText =
+    isOverdue ? "期限超過"
+    : hoursLeft === null ? null
+    : within24h ? `あと${Math.ceil(hoursLeft)}時間`
+    : `あと${daysLeft}日`;
+
+  // Who comes after the current baton holder in member_order sequence?
+  const orderedMembers = (members ?? [])
+    .filter((m) => m.user !== null && m.member_order !== null)
+    .sort((a, b) => (a.member_order ?? 0) - (b.member_order ?? 0));
+  const currentHolderIndex = orderedMembers.findIndex(
+    (m) => m.user?.id === group.current_baton_holder_id
+  );
+  const nextInOrder =
+    orderedMembers.length > 1 && currentHolderIndex !== -1
+      ? orderedMembers[(currentHolderIndex + 1) % orderedMembers.length]?.user
+      : null;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -266,24 +295,22 @@ export default async function GroupPage({ params }: Props) {
             {/* Baton status inline */}
             {group.current_holder && (
               hasBaton ? (
-                daysLeft !== null && (
-                  <span
-                    className="meta hidden sm:inline"
-                    style={{ color: isOverdue ? "var(--danger)" : daysLeft <= 1 ? "var(--signal)" : undefined }}
-                  >
-                    {isOverdue ? "期限超過" : daysLeft === 0 ? "今日まで" : `あと${daysLeft}日`}
-                  </span>
-                )
+                <span className="meta hidden sm:inline flex items-center gap-1.5">
+                  {deadlineText && (
+                    <span style={{ color: deadlineColor }}>{deadlineText}</span>
+                  )}
+                  {nextInOrder && (
+                    <span className="text-ink-light/50">→ 次: {nextInOrder.name}</span>
+                  )}
+                </span>
               ) : (
-                <span className="meta hidden sm:inline">
-                  {group.current_holder.name} の番
-                  {daysLeft !== null && (
-                    <span
-                      className="ml-1.5"
-                      style={{ color: isOverdue ? "var(--danger)" : daysLeft <= 1 ? "var(--signal)" : undefined }}
-                    >
-                      {isOverdue ? "(期限超過)" : daysLeft === 0 ? "(今日まで)" : `(あと${daysLeft}日)`}
-                    </span>
+                <span className="meta hidden sm:inline flex items-center gap-1.5">
+                  <span>{group.current_holder.name} の番</span>
+                  {deadlineText && (
+                    <span style={{ color: deadlineColor }}>({deadlineText})</span>
+                  )}
+                  {nextInOrder && (
+                    <span className="text-ink-light/50">→ 次: {nextInOrder.name}</span>
                   )}
                 </span>
               )
@@ -303,13 +330,11 @@ export default async function GroupPage({ params }: Props) {
                 currentUserId={currentUserId}
                 isOwner={isOwner}
                 hasBaton={hasBaton}
-                currentHolderId={group.current_baton_holder_id}
                 currentUserDisplayName={currentUserDisplayName}
                 members={
                   (members ?? [])
-                    .map((m) => m.user)
-                    .filter((u): u is { id: string; name: string; avatar_url: string | null } => u !== null)
-                    .map((u) => ({ id: u.id, name: u.name }))
+                    .filter((m): m is Member & { user: NonNullable<Member["user"]> } => m.user !== null)
+                    .map((m) => ({ id: m.user.id, name: m.user.name, memberOrder: m.member_order ?? undefined }))
                 }
               />
             )}
