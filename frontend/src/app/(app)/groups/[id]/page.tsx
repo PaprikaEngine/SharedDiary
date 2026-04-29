@@ -326,19 +326,31 @@ export default async function GroupPage({ params }: Props) {
             <span className="text-[13.5px] font-medium t-hi truncate max-w-[200px] md:max-w-[360px]">
               {group.name}
             </span>
-            {/* Members inline (desktop only) */}
+            {/* Members inline (desktop only). Each avatar is a link
+                to that member's プロフィール帳 page; "+N" leads to the
+                profile index (which redirects to the first member). */}
             <div className="hidden md:flex items-center gap-1 ml-2 shrink-0">
-              {members?.slice(0, 5).map((m) => (
-                <span
-                  key={m.user?.id}
-                  className="avatar"
-                  title={m.user?.name ?? ""}
-                >
-                  {m.user?.name?.charAt(0) ?? "?"}
-                </span>
-              ))}
+              {(members ?? [])
+                .filter((m): m is Member & { user: NonNullable<Member["user"]> } => m.user !== null)
+                .slice(0, 5)
+                .map((m) => (
+                  <Link
+                    key={m.user.id}
+                    href={`/groups/${id}/profiles/${m.user.id}`}
+                    className="avatar hover:ring-2 hover:ring-moss/30 transition-shadow"
+                    title={`${m.user.name} のプロフィール`}
+                  >
+                    {m.user.name.charAt(0)}
+                  </Link>
+                ))}
               {(members?.length ?? 0) > 5 && (
-                <span className="meta-sm ml-1">+{(members?.length ?? 0) - 5}</span>
+                <Link
+                  href={`/groups/${id}/profiles`}
+                  className="meta-sm ml-1 hover:t-hi transition-colors"
+                  title="全員のプロフィール"
+                >
+                  +{(members?.length ?? 0) - 5}
+                </Link>
               )}
             </div>
           </div>
@@ -409,38 +421,6 @@ export default async function GroupPage({ params }: Props) {
               sizes="1024px"
               priority
             />
-          </div>
-        )}
-
-        {/* Profile-book member shortcuts — one button per group member
-            in baton order. Click → that member's profile page. Empty
-            profiles render as a blank slate on the destination. */}
-        {(members?.length ?? 0) > 0 && (
-          <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-3 -mx-1 px-1">
-            <span className="text-xs text-ink-light shrink-0 pr-1">プロフィール帳</span>
-            {(members ?? [])
-              .filter((m): m is Member & { user: NonNullable<Member["user"]> } => m.user !== null)
-              .map((m) => (
-                <Link
-                  key={m.user.id}
-                  href={`/groups/${id}/profiles/${m.user.id}`}
-                  className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full border transition-colors shrink-0 hover:bg-cream-dark/40"
-                  style={{ borderColor: "var(--stroke)", background: "var(--paper-alt)" }}
-                >
-                  <span className="size-6 rounded-full bg-moss/15 text-moss text-[11px] font-bold flex items-center justify-center overflow-hidden shrink-0">
-                    {m.user.avatar_url ? (
-                      // Avatar URLs are user-uploaded and not whitelisted in
-                      // next.config; using a plain img tag for this small inline
-                      // case mirrors the BatonStatusBar pattern.
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={m.user.avatar_url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      m.user.name.charAt(0)
-                    )}
-                  </span>
-                  <span className="text-xs t-hi whitespace-nowrap">{m.user.name}</span>
-                </Link>
-              ))}
           </div>
         )}
 

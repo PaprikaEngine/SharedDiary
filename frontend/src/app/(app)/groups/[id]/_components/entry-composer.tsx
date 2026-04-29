@@ -30,8 +30,6 @@ import { TapeOverlayEditor, type PlacedTape } from "@/components/placed-tape";
 import {
   BlockOverlayEditor,
   BlockPicker,
-  PAGE_UNIT_BUDGET,
-  unitsConsumed,
   type PlacedBlock,
 } from "@/components/placed-block";
 import { Button } from "@/components/ui/button";
@@ -45,9 +43,11 @@ import {
   type Draft,
 } from "@/lib/draft-storage";
 
-// Center of the A4 canvas — new items drop here by default.
-const CANVAS_CENTER_X = DIARY_CANVAS_WIDTH / 2;
-const CANVAS_CENTER_Y = DIARY_CANVAS_HEIGHT / 2;
+// Profile-book mode uses a wider canvas (book-spread) to give the
+// extra room a Heisei-era プロフィール帳 needs for blocks plus
+// decorations side by side.
+const PROFILE_CANVAS_WIDTH = DIARY_CANVAS_WIDTH * 2;  // 1600
+const PROFILE_CANVAS_HEIGHT = DIARY_CANVAS_HEIGHT;    // 1131
 
 // Base display width on the canvas for newly placed media.
 // Roughly 35% of page width — large enough to see, small enough that
@@ -121,6 +121,13 @@ export function EntryComposer({ groupId, mode, profileMember }: Props) {
     : `/groups/${groupId}`;
   const headerTitle = isProfile ? "プロフィールを書く" : "日記を書く";
   const submitLabel = isProfile ? "プロフィールを保存" : "日記を投稿してバトンを渡す";
+
+  // Canvas dimensions diverge by mode: diary stays at A4 portrait,
+  // profile expands to a book-spread (2× wide).
+  const canvasWidth = isProfile ? PROFILE_CANVAS_WIDTH : DIARY_CANVAS_WIDTH;
+  const canvasHeight = isProfile ? PROFILE_CANVAS_HEIGHT : DIARY_CANVAS_HEIGHT;
+  const canvasCenterX = canvasWidth / 2;
+  const canvasCenterY = canvasHeight / 2;
 
   const [placedMedia, setPlacedMedia] = useState<PlacedMedia[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -434,8 +441,8 @@ export function EntryComposer({ groupId, mode, profileMember }: Props) {
                 type: "image",
                 previewUrl: uploaded.url,
                 uploadedPath: uploaded.path,
-                x: CANVAS_CENTER_X + dx,
-                y: CANVAS_CENTER_Y + dy,
+                x: canvasCenterX + dx,
+                y: canvasCenterY + dy,
                 scale: 1,
                 rotation: 0,
                 baseWidth: MEDIA_BASE_WIDTH,
@@ -481,8 +488,8 @@ export function EntryComposer({ groupId, mode, profileMember }: Props) {
                 type: "video",
                 previewUrl: uploaded.url,
                 uploadedPath: uploaded.path,
-                x: CANVAS_CENTER_X + dx,
-                y: CANVAS_CENTER_Y + dy,
+                x: canvasCenterX + dx,
+                y: canvasCenterY + dy,
                 scale: 1,
                 rotation: 0,
                 baseWidth: MEDIA_BASE_WIDTH,
@@ -566,8 +573,8 @@ export function EntryComposer({ groupId, mode, profileMember }: Props) {
       author_id: user.id,
       body: null,
       canvas_background: canvasBackground,
-      canvas_width: DIARY_CANVAS_WIDTH,
-      canvas_height: DIARY_CANVAS_HEIGHT,
+      canvas_width: canvasWidth,
+      canvas_height: canvasHeight,
     };
     if (isProfile && profileMember) {
       entryInsert.kind = "profile";
@@ -713,7 +720,7 @@ export function EntryComposer({ groupId, mode, profileMember }: Props) {
           <div ref={canvasWrapperRef} className="relative scroll-mt-20">
             {!draftLoaded && (
               <div
-                style={{ aspectRatio: `${DIARY_CANVAS_WIDTH} / ${DIARY_CANVAS_HEIGHT}` }}
+                style={{ aspectRatio: `${canvasWidth} / ${canvasHeight}` }}
                 className="w-full max-w-[800px] mx-auto border border-cream-dark rounded-lg bg-white flex items-center justify-center"
               >
                 <Loader2 className="size-5 animate-spin text-ink-light" />
@@ -721,14 +728,12 @@ export function EntryComposer({ groupId, mode, profileMember }: Props) {
             )}
             {draftLoaded && (
             <DiaryCanvas
-              ref={canvasRef} width={DIARY_CANVAS_WIDTH} height={DIARY_CANVAS_HEIGHT}
+              ref={canvasRef} width={canvasWidth} height={canvasHeight}
               onScaleChange={setCanvasScale}
               onCanvasInteract={clearAllSelections}
               onStampClick={() => setShowStampPicker((v) => !v)}
               stampCount={placedStamps.length}
               onBlockClick={() => setShowBlockPicker((v) => !v)}
-              blockUnitsConsumed={unitsConsumed(placedBlocks.map((b) => b.blockType))}
-              blockUnitsBudget={PAGE_UNIT_BUDGET}
               extraTapeIds={extraTapeIds}
               onTapePickerClick={() => setShowTapePicker((v) => !v)}
               initialSnapshot={initialSnapshot}
@@ -775,8 +780,8 @@ export function EntryComposer({ groupId, mode, profileMember }: Props) {
                     <StampOverlayEditor
                       stamps={placedStamps}
                       onStampsChange={setPlacedStamps}
-                      canvasWidth={DIARY_CANVAS_WIDTH}
-                      canvasHeight={DIARY_CANVAS_HEIGHT}
+                      canvasWidth={canvasWidth}
+                      canvasHeight={canvasHeight}
                       canvasScale={canvasScale}
                       selectedId={selectedStampId}
                       onSelect={handleSelectStamp}
@@ -819,8 +824,8 @@ export function EntryComposer({ groupId, mode, profileMember }: Props) {
                         instanceId: crypto.randomUUID(),
                         stampId: stamp.id,
                         url: stamp.url,
-                        x: CANVAS_CENTER_X,
-                        y: CANVAS_CENTER_Y,
+                        x: canvasCenterX,
+                        y: canvasCenterY,
                         scale: 1,
                         rotation: 0,
                         z: nextZ(),
@@ -865,8 +870,8 @@ export function EntryComposer({ groupId, mode, profileMember }: Props) {
                       {
                         instanceId,
                         blockType,
-                        x: CANVAS_CENTER_X + dx,
-                        y: CANVAS_CENTER_Y + dy,
+                        x: canvasCenterX + dx,
+                        y: canvasCenterY + dy,
                         width: 320,
                         rotation: 0,
                         data: {},
@@ -944,8 +949,8 @@ export function EntryComposer({ groupId, mode, profileMember }: Props) {
                   prev
                     ? { ...prev, previewDataUrl: firstFrame }
                     : {
-                        x: CANVAS_CENTER_X,
-                        y: CANVAS_CENTER_Y,
+                        x: canvasCenterX,
+                        y: canvasCenterY,
                         scale: 1,
                         rotation: 0,
                         baseWidth: FLIPBOOK_BASE_WIDTH,

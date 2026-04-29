@@ -100,11 +100,6 @@ type Props = {
   /** Opens the profile-block picker. Threaded through to the toolbar
    *  so the parent can render the picker as a modal sibling. */
   onBlockClick?: () => void;
-  /** Sum of currently-placed block units. Shown on the toolbar block
-   *  button as a "consumed/budget" badge. */
-  blockUnitsConsumed?: number;
-  /** Hard cap on the per-page block unit budget. */
-  blockUnitsBudget?: number;
 };
 
 // --- History reducer ---
@@ -401,7 +396,7 @@ export type DiaryCanvasHandle = {
 // --- Component ---
 
 export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
-  function DiaryCanvas({ width = 800, height = 1131, onScaleChange, stampOverlay, onStampClick, stampCount, extraTapeIds, onTapePickerClick, onCanvasInteract, initialSnapshot, onChange, onToolChange, onTapePlaced, onBlockClick, blockUnitsConsumed, blockUnitsBudget }, ref) {
+  function DiaryCanvas({ width = 800, height = 1131, onScaleChange, stampOverlay, onStampClick, stampCount, extraTapeIds, onTapePickerClick, onCanvasInteract, initialSnapshot, onChange, onToolChange, onTapePlaced, onBlockClick }, ref) {
     const drawCanvasRef = useRef<HTMLCanvasElement>(null);
     const bgCanvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -781,8 +776,6 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
           onStampClick={onStampClick}
           stampCount={stampCount}
           onBlockClick={onBlockClick}
-          blockUnitsConsumed={blockUnitsConsumed}
-          blockUnitsBudget={blockUnitsBudget}
         />
 
         <div

@@ -5,9 +5,7 @@ export { BlockPicker } from "./block-picker";
 export {
   BLOCK_TEMPLATES,
   BLOCK_TEMPLATE_BY_ID,
-  PAGE_UNIT_BUDGET,
   getBlockTemplate,
-  unitsConsumed,
   type BlockTemplate,
   type BlockField,
 } from "./block-templates";
