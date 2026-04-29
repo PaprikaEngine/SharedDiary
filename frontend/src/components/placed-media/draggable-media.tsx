@@ -137,8 +137,13 @@ export function DraggableMedia({
         <>
           <div className="absolute inset-0 border-2 border-moss border-dashed rounded-sm pointer-events-none" />
 
+          {/* See draggable-stamp.tsx for the rationale on
+              onPointerDown stopPropagation — parent's preventDefault on
+              pointerdown otherwise kills the click event on these
+              action buttons. */}
           <button
             type="button"
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
               onDelete();
@@ -151,6 +156,7 @@ export function DraggableMedia({
           <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-1 z-30">
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 onUpdate({ scale: Math.max(0.3, media.scale - 0.15) });
@@ -161,6 +167,7 @@ export function DraggableMedia({
             </button>
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 onUpdate({ rotation: (media.rotation + 15) % 360 });
@@ -171,6 +178,7 @@ export function DraggableMedia({
             </button>
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 onUpdate({ scale: Math.min(3, media.scale + 0.15) });

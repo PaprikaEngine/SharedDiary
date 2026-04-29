@@ -1,9 +1,10 @@
 "use client";
 
 // IndexedDB-backed draft persistence for the diary compose page. Users
-// can close / reload the page and pick up where they left off. Scoped
-// per group — each group has its own active draft, cleared when the
-// entry is successfully submitted.
+// can close / reload the page and pick up where they left off. Each
+// draft is keyed by a caller-provided string so the composer can scope
+// drafts independently — diary drafts use "group:<id>", profile drafts
+// use "group:<id>:profile:<memberId>", etc.
 //
 // IDB handles Blob values natively via structured clone, so placed
 // media (images + videos) survive a reload with their file bytes
@@ -13,6 +14,8 @@
 import type { DiarySnapshot } from "@/components/diary-canvas/diary-canvas";
 import type { PlacedStamp } from "@/components/stamps";
 import type { PlacedFlipbook, FlipbookData } from "@/components/flipbook";
+import type { PlacedTape } from "@/components/placed-tape";
+import type { PlacedBlock } from "@/components/placed-block";
 
 const DB_NAME = "shared-diary";
 const VERSION = 1;
@@ -40,6 +43,12 @@ export type Draft = {
   savedAt: number;
   diary: DiarySnapshot;
   placedStamps: PlacedStamp[];
+  /** Optional — added in the tape-overlay refactor. Older draft
+   *  records won't have it; consumers should default to []. */
+  placedTapes?: PlacedTape[];
+  /** Optional — added in the profile-book refactor. Older draft
+   *  records won't have it; consumers should default to []. */
+  placedBlocks?: PlacedBlock[];
   placedMedia: DraftMedia[];
   flipbookData: FlipbookData | null;
   flipbookPlacement: PlacedFlipbook | null;
@@ -68,15 +77,23 @@ function promisify<T>(r: IDBRequest<T>): Promise<T> {
   });
 }
 
-function keyFor(groupId: string) {
+/** Build a draft key for a diary compose session. */
+export function diaryDraftKey(groupId: string): string {
   return `group:${groupId}`;
 }
 
-export async function saveDraft(groupId: string, draft: Draft): Promise<void> {
+/** Build a draft key for a profile-book compose session. Scoped per
+ *  (group, member) so a profile draft never collides with the group's
+ *  diary draft. */
+export function profileDraftKey(groupId: string, memberId: string): string {
+  return `group:${groupId}:profile:${memberId}`;
+}
+
+export async function saveDraft(key: string, draft: Draft): Promise<void> {
   try {
     const db = await openDB();
     const tx = db.transaction(STORE, "readwrite");
-    await promisify(tx.objectStore(STORE).put(draft, keyFor(groupId)));
+    await promisify(tx.objectStore(STORE).put(draft, key));
   } catch (err) {
     // Quota exceeded, private browsing mode, etc. — don't break
     // editing just because persistence failed.
@@ -84,11 +101,11 @@ export async function saveDraft(groupId: string, draft: Draft): Promise<void> {
   }
 }
 
-export async function loadDraft(groupId: string): Promise<Draft | null> {
+export async function loadDraft(key: string): Promise<Draft | null> {
   try {
     const db = await openDB();
     const tx = db.transaction(STORE, "readonly");
-    const result = await promisify(tx.objectStore(STORE).get(keyFor(groupId)));
+    const result = await promisify(tx.objectStore(STORE).get(key));
     return (result as Draft | undefined) ?? null;
   } catch (err) {
     console.warn("draft load failed:", err);
@@ -96,11 +113,11 @@ export async function loadDraft(groupId: string): Promise<Draft | null> {
   }
 }
 
-export async function clearDraft(groupId: string): Promise<void> {
+export async function clearDraft(key: string): Promise<void> {
   try {
     const db = await openDB();
     const tx = db.transaction(STORE, "readwrite");
-    await promisify(tx.objectStore(STORE).delete(keyFor(groupId)));
+    await promisify(tx.objectStore(STORE).delete(key));
   } catch (err) {
     console.warn("draft clear failed:", err);
   }

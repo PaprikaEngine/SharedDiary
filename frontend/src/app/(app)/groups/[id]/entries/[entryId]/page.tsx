@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { EntryStampsDisplay } from "./entry-stamps-display";
 import { ReactionBar } from "./reaction-bar";
+import { EntryTapesDisplay } from "./entry-tapes-display";
+import { EntryBlocksDisplay } from "./entry-blocks-display";
 import { FlipbookPlayer } from "@/components/flipbook";
 
 type Props = { params: Promise<{ id: string; entryId: string }> };
@@ -21,6 +23,8 @@ export default async function EntryPage({ params }: Props) {
   };
   type EntryStampData = { id: string; x: number; y: number; scale: number; rotation: number; stamp: { url: string; thumbnail_url: string | null } };
   type ReactionData = { stamp_id: string; user_id: string; stamp: { id: string; name: string; url: string; thumbnail_url: string | null } };
+  type EntryTapeData = { id: string; tape_id: string; x: number; y: number; length: number; rotation: number; image_url: string | null };
+  type EntryBlockData = { id: string; block_type: string; x: number; y: number; width: number; rotation: number; data: Record<string, string> };
 
   let entry: EntryWithRelations = {
     id: entryId,
@@ -35,6 +39,8 @@ export default async function EntryPage({ params }: Props) {
   let nextEntry: { id: string } | null = null;
   let entryStamps: EntryStampData[] = [];
   let reactions: ReactionData[] = [];
+  let entryTapes: EntryTapeData[] = [];
+  let entryBlocks: EntryBlockData[] = [];
   let flipbook: { fps: number; loop: boolean; frames: { order: number; canvasJson: string }[] } | null = null;
   let currentUserId: string | null = null;
 
@@ -63,6 +69,28 @@ export default async function EntryPage({ params }: Props) {
 
       const { data: rd } = await supabase.from("reactions").select(`stamp_id, user_id, stamp:stamps(id, name, url, thumbnail_url)`).eq("entry_id", entryId);
       if (rd) reactions = rd as unknown as ReactionData[];
+
+      // Tapes — fetch placements then a side query for image_url so
+      // group tapes' tile patterns can lazy-load on the client. See
+      // groups/[id]/page.tsx for the same pattern.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: td } = await (supabase as any).from("entry_tapes").select("id, tape_id, x, y, length, rotation").eq("entry_id", entryId);
+      const rawTapes = (td ?? []) as { id: string; tape_id: string; x: number; y: number; length: number; rotation: number }[];
+      const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const groupTapeIds = Array.from(new Set(rawTapes.map((t) => t.tape_id))).filter((id) => uuidLike.test(id));
+      const tapeUrlMap = new Map<string, string>();
+      if (groupTapeIds.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: tapeMeta } = await (supabase as any).from("tapes").select("id, image_url").in("id", groupTapeIds);
+        for (const m of (tapeMeta ?? []) as { id: string; image_url: string }[]) {
+          tapeUrlMap.set(m.id, m.image_url);
+        }
+      }
+      entryTapes = rawTapes.map((t) => ({ ...t, image_url: tapeUrlMap.get(t.tape_id) ?? null }));
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: bd } = await (supabase as any).from("entry_blocks").select("id, block_type, x, y, width, rotation, data").eq("entry_id", entryId);
+      if (bd) entryBlocks = bd as EntryBlockData[];
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: fd } = await (supabase as any).from("flipbooks").select(`fps, loop, frames:flipbook_frames(order, canvas_json)`).eq("entry_id", entryId).single();
@@ -165,6 +193,26 @@ export default async function EntryPage({ params }: Props) {
           {entryStamps.length > 0 && sortedMedia.length > 0 && (
             <EntryStampsDisplay
               stamps={entryStamps}
+              canvasWidth={entry.canvas_width ?? 800}
+              canvasHeight={entry.canvas_height ?? 600}
+            />
+          )}
+
+          {/* Tape overlay — mirrors the stamps block above. The single-
+              entry view is a list-style layout so tapes get their own
+              sized container instead of being layered on the media. */}
+          {entryTapes.length > 0 && (
+            <EntryTapesDisplay
+              tapes={entryTapes}
+              canvasWidth={entry.canvas_width ?? 800}
+              canvasHeight={entry.canvas_height ?? 600}
+            />
+          )}
+
+          {/* Profile-book blocks — same pattern as tapes above. */}
+          {entryBlocks.length > 0 && (
+            <EntryBlocksDisplay
+              blocks={entryBlocks}
               canvasWidth={entry.canvas_width ?? 800}
               canvasHeight={entry.canvas_height ?? 600}
             />

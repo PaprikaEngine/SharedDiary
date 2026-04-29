@@ -39,6 +39,16 @@ type Props = {
   onClear: () => void;
   onStampClick?: () => void;
   stampCount?: number;
+  /** Opens the profile-block picker. Like onStampClick, the picker
+   *  itself lives in the parent so it can be a modal sibling of the
+   *  canvas rather than nested inside the toolbar. */
+  onBlockClick?: () => void;
+  /** Sum of placed-block units. Shown as a "consumed/budget" badge on
+   *  the block button so the user knows how much page-space is left. */
+  blockUnitsConsumed?: number;
+  /** Hard cap for the unit budget. Block button is rendered as
+   *  disabled when consumed === budget. */
+  blockUnitsBudget?: number;
 };
 
 const LINE_WIDTH_LABELS = ["細", "中", "太"];
@@ -70,6 +80,9 @@ export function CanvasToolbar({
   onClear,
   onStampClick,
   stampCount = 0,
+  onBlockClick,
+  blockUnitsConsumed = 0,
+  blockUnitsBudget = 0,
 }: Props) {
   const [wheelOpen, setWheelOpen] = useState(false);
   const wheelRef = useRef<HTMLDivElement>(null);
@@ -185,6 +198,28 @@ export function CanvasToolbar({
               {stampCount > 0 && (
                 <span className="absolute -top-2 -right-2 bg-moss text-cream text-[10px] rounded-full w-4 h-4 flex items-center justify-center">
                   {stampCount}
+                </span>
+              )}
+            </span>
+          </ToolButton>
+        )}
+        {onBlockClick && (
+          <ToolButton
+            active={false}
+            onClick={onBlockClick}
+            title="プロフィール項目"
+          >
+            <span className="relative">
+              {/* Card-with-rows — reads as "structured field block" */}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <line x1="7" y1="9" x2="14" y2="9" />
+                <line x1="7" y1="13" x2="17" y2="13" />
+                <line x1="7" y1="17" x2="11" y2="17" />
+              </svg>
+              {blockUnitsBudget > 0 && (
+                <span className="absolute -top-2 -right-3 bg-moss text-cream text-[9px] leading-none rounded-full px-1 py-[2px] font-medium tabular-nums">
+                  {blockUnitsConsumed}/{blockUnitsBudget}
                 </span>
               )}
             </span>

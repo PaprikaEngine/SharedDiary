@@ -10,6 +10,8 @@ import { ReactionBar } from "./entries/[entryId]/reaction-bar";
 import { FlipbookPlayer, FlipbookOverlayDisplay } from "@/components/flipbook";
 import { CanvasBackground } from "@/components/diary-canvas";
 import { MediaOverlayDisplay } from "@/components/placed-media";
+import { TapeOverlayDisplay } from "@/components/placed-tape";
+import { BlockOverlayDisplay } from "@/components/placed-block";
 import { createClient } from "@/lib/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -36,6 +38,8 @@ type EntryData = {
   }[] | null;
   stamps: { id: string; x: number; y: number; scale: number; rotation: number; stamp: { url: string; thumbnail_url: string | null } }[];
   reactions: { stamp_id: string; user_id: string; stamp: { id: string; name: string; url: string; thumbnail_url: string | null } }[];
+  tapes: { id: string; tape_id: string; x: number; y: number; length: number; rotation: number; image_url: string | null }[];
+  blocks: { id: string; block_type: string; x: number; y: number; width: number; rotation: number; data: Record<string, string> }[];
   flipbook: {
     fps: number; loop: boolean;
     x: number | null; y: number | null; scale: number | null;
@@ -142,7 +146,11 @@ export function PageViewer({ entries, initialIndex, groupId, groupName, coverIma
     entry.flipbook.y != null &&
     entry.flipbook.base_width != null &&
     entry.flipbook.base_height != null;
-  const hasCanvasBox = !!canvasMedia || placedMedia.length > 0 || flipbookPlaced;
+  // Tapes / blocks alone are enough to warrant a canvas box — without
+  // it they'd have nothing to anchor to and would silently disappear.
+  const hasTapes = (entry?.tapes?.length ?? 0) > 0;
+  const hasBlocks = (entry?.blocks?.length ?? 0) > 0;
+  const hasCanvasBox = !!canvasMedia || placedMedia.length > 0 || flipbookPlaced || hasTapes || hasBlocks;
 
   // Per-entry canvas dimensions — new entries store their actual A4
   // values; legacy entries fall back to the original 800×600.
@@ -433,9 +441,42 @@ export function PageViewer({ entries, initialIndex, groupId, groupName, coverIma
                   />
                 </div>
               )}
+              {entry.blocks.length > 0 && (
+                // Blocks sit between media and decorative items (stamps
+                // / tapes) — text fields should remain readable, but
+                // user-placed stickers should still be able to overlap
+                // them if the author intended that.
+                <div className="absolute inset-0 pointer-events-none">
+                  <BlockOverlayDisplay
+                    blocks={entry.blocks}
+                    canvasWidth={entryCanvasWidth}
+                    displayWidth={canvasDisplayWidth}
+                  />
+                </div>
+              )}
               {entry.stamps.length > 0 && (
                 <div className="absolute inset-0 pointer-events-none">
                   <EntryStampsDisplay stamps={entry.stamps} canvasWidth={entryCanvasWidth} canvasHeight={entryCanvasHeight} />
+                </div>
+              )}
+              {entry.tapes.length > 0 && (
+                // Tapes render last so they sit on top of media and
+                // stamps — matching the user's mental model of pasting
+                // washi tape over photos to "seal" them on the page.
+                <div className="absolute inset-0 pointer-events-none">
+                  <TapeOverlayDisplay
+                    tapes={entry.tapes.map((t) => ({
+                      id: t.id,
+                      tape_id: t.tape_id,
+                      x: t.x,
+                      y: t.y,
+                      length: t.length,
+                      rotation: t.rotation,
+                      image_url: t.image_url,
+                    }))}
+                    canvasWidth={entryCanvasWidth}
+                    displayWidth={canvasDisplayWidth}
+                  />
                 </div>
               )}
             </div>

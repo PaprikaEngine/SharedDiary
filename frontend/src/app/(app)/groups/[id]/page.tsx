@@ -53,6 +53,15 @@ export default async function GroupPage({ params }: Props) {
   type UserRow = { id: string; name: string; avatar_url: string | null };
   type StampRow = { id: string; x: number; y: number; scale: number; rotation: number; stamp: { url: string; thumbnail_url: string | null } };
   type ReactionRow = { stamp_id: string; user_id: string; stamp: { id: string; name: string; url: string; thumbnail_url: string | null } };
+  // Tapes are stored as DOM-overlay objects (post Phase 1 refactor).
+  // tape_id is text — group tapes use a uuid that points at a row in
+  // public.tapes; builtins use string slugs like "check-rose" with no
+  // DB row, so image_url is hydrated only for the uuid case.
+  type TapeRow = { id: string; tape_id: string; x: number; y: number; length: number; rotation: number; image_url: string | null };
+  // Profile-book block — structured field card placed on the canvas.
+  // `data` is a flat field-key → value map; field schema lives in the
+  // client templates (block-templates.ts).
+  type BlockRow = { id: string; block_type: string; x: number; y: number; width: number; rotation: number; data: Record<string, string> };
 
   let group: Group = {
     id,
@@ -92,6 +101,8 @@ export default async function GroupPage({ params }: Props) {
       rotation: number | null; base_width: number | null;
     }[] | null;
     stamps: StampRow[]; reactions: ReactionRow[];
+    tapes: TapeRow[];
+    blocks: BlockRow[];
     flipbook: {
       fps: number; loop: boolean;
       x: number | null; y: number | null; scale: number | null;
@@ -108,7 +119,7 @@ export default async function GroupPage({ params }: Props) {
       canvas_background: null,
       canvas_width: null, canvas_height: null,
       author: { id: "2", name: "ともだち", avatar_url: null },
-      media: null, stamps: [], reactions: [], flipbook: null,
+      media: null, stamps: [], reactions: [], tapes: [], blocks: [], flipbook: null,
     },
     {
       id: "demo-2",
@@ -117,7 +128,7 @@ export default async function GroupPage({ params }: Props) {
       canvas_background: null,
       canvas_width: null, canvas_height: null,
       author: { id: "1", name: "あなた", avatar_url: null },
-      media: null, stamps: [], reactions: [], flipbook: null,
+      media: null, stamps: [], reactions: [], tapes: [], blocks: [], flipbook: null,
     },
   ];
 
@@ -148,7 +159,9 @@ export default async function GroupPage({ params }: Props) {
       if (!groupData) notFound();
       group = groupData as Group;
 
-      // Fetch members ordered by member_order so nextInOrder is derivable
+      // Fetch members ordered by member_order so nextInOrder is derivable.
+      // group_members has no id column (composite PK group_id + user_id),
+      // so profile-book links keyed by user.id are sufficient.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: membersData } = await (supabase as any).from("group_members").select(`role, member_order, user:users(id, name, avatar_url)`).eq("group_id", id).order("member_order", { ascending: true });
       members = membersData as Member[] | null;
@@ -156,11 +169,15 @@ export default async function GroupPage({ params }: Props) {
       // Fetch entries (newest first). Avoid PostgREST embedded selects —
       // the `order` column on entry_media / flipbook_frames collides with
       // PostgREST's `order` directive and can silently return no rows.
+      // Filter to kind='diary' so profile-book entries (which live in
+      // the same table but get their own /profiles/[memberId] view)
+      // don't leak into the diary timeline.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: entriesData, error: entriesError } = await (supabase as any)
         .from("entries")
         .select("id, body, created_at, author_id, canvas_background, canvas_width, canvas_height")
         .eq("group_id", id)
+        .eq("kind", "diary")
         .order("created_at", { ascending: false });
       if (entriesError) console.error("[GroupPage] entries fetch failed:", entriesError);
       const rawEntries = (entriesData ?? []) as EntryRow[];
@@ -178,6 +195,8 @@ export default async function GroupPage({ params }: Props) {
       let allStamps: (StampRow & { entry_id: string })[] = [];
       let allReactions: (ReactionRow & { entry_id: string })[] = [];
       let allFlipbooks: (FlipbookRow & { entry_id: string })[] = [];
+      let allTapes: (TapeRow & { entry_id: string })[] = [];
+      let allBlocks: (BlockRow & { entry_id: string })[] = [];
 
       if (entryIds.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -195,6 +214,32 @@ export default async function GroupPage({ params }: Props) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: fd } = await (supabase as any).from("flipbooks").select(`entry_id, fps, loop, x, y, scale, rotation, base_width, base_height, frames:flipbook_frames(order, canvas_json)`).in("entry_id", entryIds);
         if (fd) allFlipbooks = fd as (FlipbookRow & { entry_id: string })[];
+
+        // Tapes — entry_tapes plus a side-fetch on the tapes table for
+        // group-uploaded ones so the viewer can lazy-load tile images
+        // without re-querying per entry.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: tdRows } = await (supabase as any).from("entry_tapes").select("id, entry_id, tape_id, x, y, length, rotation").in("entry_id", entryIds);
+        const rawTapes = (tdRows ?? []) as { id: string; entry_id: string; tape_id: string; x: number; y: number; length: number; rotation: number }[];
+
+        const tapeUrlMap = new Map<string, string>();
+        const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const groupTapeIds = Array.from(new Set(rawTapes.map((t) => t.tape_id))).filter((id) => uuidLike.test(id));
+        if (groupTapeIds.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: tapeMeta } = await (supabase as any).from("tapes").select("id, image_url").in("id", groupTapeIds);
+          for (const m of (tapeMeta ?? []) as { id: string; image_url: string }[]) {
+            tapeUrlMap.set(m.id, m.image_url);
+          }
+        }
+        allTapes = rawTapes.map((t) => ({
+          ...t,
+          image_url: tapeUrlMap.get(t.tape_id) ?? null,
+        }));
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: bd } = await (supabase as any).from("entry_blocks").select("id, entry_id, block_type, x, y, width, rotation, data").in("entry_id", entryIds);
+        if (bd) allBlocks = bd as (BlockRow & { entry_id: string })[];
       }
 
       entries = rawEntries.map((e) => {
@@ -210,6 +255,8 @@ export default async function GroupPage({ params }: Props) {
           media: allMedia.filter((m) => m.entry_id === e.id),
           stamps: allStamps.filter((s) => s.entry_id === e.id),
           reactions: allReactions.filter((r) => r.entry_id === e.id),
+          tapes: allTapes.filter((t) => t.entry_id === e.id),
+          blocks: allBlocks.filter((b) => b.entry_id === e.id),
           flipbook: fb ? {
             fps: fb.fps, loop: fb.loop,
             x: fb.x, y: fb.y, scale: fb.scale, rotation: fb.rotation,
@@ -362,6 +409,38 @@ export default async function GroupPage({ params }: Props) {
               sizes="1024px"
               priority
             />
+          </div>
+        )}
+
+        {/* Profile-book member shortcuts — one button per group member
+            in baton order. Click → that member's profile page. Empty
+            profiles render as a blank slate on the destination. */}
+        {(members?.length ?? 0) > 0 && (
+          <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-3 -mx-1 px-1">
+            <span className="text-xs text-ink-light shrink-0 pr-1">プロフィール帳</span>
+            {(members ?? [])
+              .filter((m): m is Member & { user: NonNullable<Member["user"]> } => m.user !== null)
+              .map((m) => (
+                <Link
+                  key={m.user.id}
+                  href={`/groups/${id}/profiles/${m.user.id}`}
+                  className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full border transition-colors shrink-0 hover:bg-cream-dark/40"
+                  style={{ borderColor: "var(--stroke)", background: "var(--paper-alt)" }}
+                >
+                  <span className="size-6 rounded-full bg-moss/15 text-moss text-[11px] font-bold flex items-center justify-center overflow-hidden shrink-0">
+                    {m.user.avatar_url ? (
+                      // Avatar URLs are user-uploaded and not whitelisted in
+                      // next.config; using a plain img tag for this small inline
+                      // case mirrors the BatonStatusBar pattern.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={m.user.avatar_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      m.user.name.charAt(0)
+                    )}
+                  </span>
+                  <span className="text-xs t-hi whitespace-nowrap">{m.user.name}</span>
+                </Link>
+              ))}
           </div>
         )}
 

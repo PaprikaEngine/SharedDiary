@@ -131,8 +131,13 @@ export function DraggableFlipbook({
         <>
           <div className="absolute inset-0 border-2 border-moss border-dashed rounded-sm pointer-events-none" />
 
+          {/* See draggable-stamp.tsx for the rationale on
+              onPointerDown stopPropagation — parent's preventDefault on
+              pointerdown otherwise kills the click event on these
+              action buttons. */}
           <button
             type="button"
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
             className="absolute -top-3 -right-3 w-6 h-6 bg-ink text-cream rounded-full text-xs flex items-center justify-center hover:bg-red-600 z-30"
           >
@@ -142,6 +147,7 @@ export function DraggableFlipbook({
           <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-1 z-30">
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => { e.stopPropagation(); onUpdate({ scale: Math.max(0.3, flipbook.scale - 0.15) }); }}
               className="w-6 h-6 bg-white border border-cream-dark rounded text-xs flex items-center justify-center hover:bg-cream-dark"
             >
@@ -149,6 +155,7 @@ export function DraggableFlipbook({
             </button>
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => { e.stopPropagation(); onUpdate({ rotation: (flipbook.rotation + 15) % 360 }); }}
               className="w-6 h-6 bg-white border border-cream-dark rounded text-xs flex items-center justify-center hover:bg-cream-dark"
             >
@@ -156,6 +163,7 @@ export function DraggableFlipbook({
             </button>
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => { e.stopPropagation(); onUpdate({ scale: Math.min(3, flipbook.scale + 0.15) }); }}
               className="w-6 h-6 bg-white border border-cream-dark rounded text-xs flex items-center justify-center hover:bg-cream-dark"
             >
@@ -163,6 +171,7 @@ export function DraggableFlipbook({
             </button>
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => { e.stopPropagation(); onEdit(); }}
               className="w-6 h-6 bg-moss text-white border border-moss rounded text-xs flex items-center justify-center hover:bg-moss-dark"
               title="編集"

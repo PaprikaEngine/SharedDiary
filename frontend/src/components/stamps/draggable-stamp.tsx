@@ -117,9 +117,16 @@ export function DraggableStamp({
           {/* Selection border */}
           <div className="absolute inset-0 border-2 border-moss border-dashed rounded pointer-events-none" />
 
-          {/* Delete button */}
+          {/* Delete button.
+              NOTE on the onPointerDown stopPropagation: the parent div
+              calls e.preventDefault() in its own pointerdown handler to
+              suppress browser drag/text-select. preventDefault on
+              pointerdown also cancels the synthesized click event, so
+              without stopping propagation here the button's onClick
+              never fires. Same trick applied to all action buttons. */}
           <button
             type="button"
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
               onDelete();
@@ -133,6 +140,7 @@ export function DraggableStamp({
           <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-1 z-30">
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 onUpdate({ scale: Math.max(0.3, stamp.scale - 0.2) });
@@ -143,6 +151,7 @@ export function DraggableStamp({
             </button>
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 onUpdate({ rotation: (stamp.rotation + 15) % 360 });
@@ -153,6 +162,7 @@ export function DraggableStamp({
             </button>
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 onUpdate({ scale: Math.min(3, stamp.scale + 0.2) });

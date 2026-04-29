@@ -90,7 +90,12 @@ export function TapePicker({ groupId, onClose, onTapeAdded, onTapeRemoved, curre
 
       const tapeId = crypto.randomUUID();
       const ext = (file.name.split(".").pop() || "png").toLowerCase();
-      const path = `tapes/${groupId}/${tapeId}.${ext}`;
+      // groupId-first path so the storage RLS policy
+      // (is_group_member((foldername(name))[1]::uuid, ...)) can
+      // extract the group id from the first folder. Putting "tapes/"
+      // in front would make the policy try to cast "tapes" → uuid and
+      // fail with an InvalidUuid error.
+      const path = `${groupId}/tapes/${tapeId}.${ext}`;
 
       const { error: upErr } = await supabase.storage
         .from("media")

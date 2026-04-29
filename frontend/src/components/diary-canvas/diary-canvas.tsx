@@ -32,6 +32,12 @@ export type TextElement = {
   fontSize: number;
 };
 
+/** Used only as a transient shape during the tape tool drag. Tapes
+ *  are no longer persisted as canvas pixels — on pointerup the
+ *  finalised endpoints are emitted via `onTapePlaced` so the parent
+ *  can promote them to a PlacedTape DOM overlay (see
+ *  components/placed-tape). The temporary preview is still drawn into
+ *  the draw canvas while the user is dragging. */
 export type TapeElement = {
   type: "tape";
   x1: number;
@@ -41,7 +47,7 @@ export type TapeElement = {
   tapeId: TapeId;
 };
 
-export type CanvasElement = StrokeElement | TextElement | TapeElement;
+export type CanvasElement = StrokeElement | TextElement;
 
 /** Serializable snapshot of the DiaryCanvas internal state. Parents
  *  can store this (e.g. in IndexedDB) and rehydrate a fresh canvas
@@ -86,6 +92,19 @@ type Props = {
    *  toggle overlay interactivity (only the select tool lets users
    *  tap/drag placed items; all drawing tools pass through). */
   onToolChange?: (tool: Tool) => void;
+  /** Emitted when the user finishes dragging a tape with the tape
+   *  tool. Tapes are no longer baked into canvas pixels — the parent
+   *  promotes the placement to a PlacedTape DOM overlay and tracks
+   *  it alongside stamps / media / flipbooks. */
+  onTapePlaced?: (placement: { tapeId: TapeId; x: number; y: number; length: number; rotation: number }) => void;
+  /** Opens the profile-block picker. Threaded through to the toolbar
+   *  so the parent can render the picker as a modal sibling. */
+  onBlockClick?: () => void;
+  /** Sum of currently-placed block units. Shown on the toolbar block
+   *  button as a "consumed/budget" badge. */
+  blockUnitsConsumed?: number;
+  /** Hard cap on the per-page block unit budget. */
+  blockUnitsBudget?: number;
 };
 
 // --- History reducer ---
@@ -369,7 +388,6 @@ function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement) {
   if (!el) return;
   if (el.type === "stroke") drawStroke(ctx, el);
   else if (el.type === "text") drawText(ctx, el);
-  else if (el.type === "tape") drawTape(ctx, el);
 }
 
 // --- Exported types ---
@@ -383,7 +401,7 @@ export type DiaryCanvasHandle = {
 // --- Component ---
 
 export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
-  function DiaryCanvas({ width = 800, height = 1131, onScaleChange, stampOverlay, onStampClick, stampCount, extraTapeIds, onTapePickerClick, onCanvasInteract, initialSnapshot, onChange, onToolChange }, ref) {
+  function DiaryCanvas({ width = 800, height = 1131, onScaleChange, stampOverlay, onStampClick, stampCount, extraTapeIds, onTapePickerClick, onCanvasInteract, initialSnapshot, onChange, onToolChange, onTapePlaced, onBlockClick, blockUnitsConsumed, blockUnitsBudget }, ref) {
     const drawCanvasRef = useRef<HTMLCanvasElement>(null);
     const bgCanvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -406,7 +424,14 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
     const [background, setBackground] = useState<BackgroundType>(initialSnapshot?.background ?? "ruled");
 
     const [history, dispatch] = useReducer(historyReducer, {
-      elements: initialSnapshot?.canvasElements ?? [],
+      // Old drafts (pre-tape-overlay refactor) may contain `type:
+      // "tape"` entries. Filter them out at hydration so they don't
+      // sit as zombies in the history (drawElement won't render them
+      // any more, but they'd still consume undo slots and pollute
+      // emitted snapshots).
+      elements: (initialSnapshot?.canvasElements ?? []).filter(
+        (el): el is CanvasElement => !!el && (el.type === "stroke" || el.type === "text")
+      ),
       undone: [],
     });
     // Keep a ref in sync for use inside pointer event handlers (avoids stale closures)
@@ -573,8 +598,32 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
         currentTapeRef.current = null;
         // Only commit if the user actually dragged — a tap shouldn't
         // create a zero-length tape.
-        const len = Math.hypot(finished.x2 - finished.x1, finished.y2 - finished.y1);
-        if (len >= 8) dispatch({ type: "push", element: finished });
+        const dx = finished.x2 - finished.x1;
+        const dy = finished.y2 - finished.y1;
+        const len = Math.hypot(dx, dy);
+        if (len >= 8) {
+          // Promote to a DOM-overlay PlacedTape via the parent. Tapes
+          // are no longer baked into canvas pixels, so we also clear
+          // the live preview the move handler painted.
+          const cx = (finished.x1 + finished.x2) / 2;
+          const cy = (finished.y1 + finished.y2) / 2;
+          const rotationDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+          onTapePlaced?.({
+            tapeId: finished.tapeId,
+            x: cx,
+            y: cy,
+            length: len,
+            rotation: rotationDeg,
+          });
+        }
+        // Wipe the preview either way — committed tapes show up as a
+        // DOM overlay on the next render, and abandoned ones should
+        // disappear immediately.
+        const ctx = drawCanvasRef.current?.getContext("2d");
+        if (ctx) {
+          ctx.clearRect(0, 0, width, height);
+          for (const el of elementsRef.current) drawElement(ctx, el);
+        }
         return;
       }
 
@@ -731,6 +780,9 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
           onClear={handleClear}
           onStampClick={onStampClick}
           stampCount={stampCount}
+          onBlockClick={onBlockClick}
+          blockUnitsConsumed={blockUnitsConsumed}
+          blockUnitsBudget={blockUnitsBudget}
         />
 
         <div

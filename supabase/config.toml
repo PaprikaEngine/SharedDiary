@@ -1,5 +1,7 @@
-[project]
-name = "shared-diary"
+# Local-dev only. Production project is linked via supabase/.temp/
+# project-ref. Newer CLI versions removed the [project] block —
+# `project_id` is the supported form.
+project_id = "shared-diary"
 
 [api]
 enabled = true
@@ -21,5 +23,9 @@ enable_signup = true
 double_confirm_changes = true
 enable_confirmations = true
 
+# Production Google OAuth is configured directly in the Supabase
+# dashboard. This block stays disabled locally because newer CLI
+# versions require client_id / secret here, and we don't want to
+# stash secrets in the repo.
 [auth.external.google]
-enabled = true
+enabled = false

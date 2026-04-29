@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { LottieStamp } from "./lottie-stamp";
 import imageCompression from "browser-image-compression";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, AlertCircle } from "lucide-react";
 
 type Stamp = {
   id: string;
@@ -26,6 +26,7 @@ export function StampPicker({ groupId, onSelect, onClose, compact = false }: Pro
   const [groupStamps, setGroupStamps] = useState<Stamp[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"builtin" | "group">("builtin");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
@@ -56,14 +57,18 @@ export function StampPicker({ groupId, onSelect, onClose, compact = false }: Pro
     const file = e.target.files?.[0];
     if (!file || !groupId) return;
     if (fileInputRef.current) fileInputRef.current.value = "";
+    setError(null);
 
     const allowed = ["image/png", "image/gif", "image/webp", "image/jpeg"];
-    if (!allowed.includes(file.type)) return;
+    if (!allowed.includes(file.type)) {
+      setError("PNG / GIF / WebP / JPEG のみ対応しています");
+      return;
+    }
 
     setUploading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) { setError("ログインが必要です"); return; }
 
       // Compress if not GIF (preserve GIF animation)
       const isGif = file.type === "image/gif";
@@ -71,17 +76,20 @@ export function StampPicker({ groupId, onSelect, onClose, compact = false }: Pro
 
       const stampId = crypto.randomUUID();
       const ext = file.name.split(".").pop() || "png";
-      const path = `stamps/${groupId}/${stampId}.${ext}`;
+      // groupId-first path — the storage RLS policy extracts the group
+      // id from the first folder via foldername(name)[1]::uuid, so
+      // anything else as the first segment fails the cast.
+      const path = `${groupId}/stamps/${stampId}.${ext}`;
 
       const { error: upErr } = await supabase.storage.from("media").upload(path, processed, { contentType: file.type });
-      if (upErr) { console.error(upErr); return; }
+      if (upErr) { setError(upErr.message); return; }
 
       const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(path);
       const name = file.name.replace(/\.[^.]+$/, "").slice(0, 30) || "カスタム";
       const stampType = isGif ? "apng" : "webp";
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from("stamps").insert({
+      const { error: insertErr } = await (supabase as any).from("stamps").insert({
         name,
         type: stampType,
         url: publicUrl,
@@ -90,6 +98,7 @@ export function StampPicker({ groupId, onSelect, onClose, compact = false }: Pro
         group_id: groupId,
         created_by: user.id,
       });
+      if (insertErr) { setError(insertErr.message); return; }
 
       await loadStamps();
       setTab("group");
@@ -111,6 +120,17 @@ export function StampPicker({ groupId, onSelect, onClose, compact = false }: Pro
           &times;
         </button>
       </div>
+
+      {error && (
+        <div
+          className="flex items-start gap-2 mb-3 px-3 py-2 rounded-md text-[12.5px]"
+          style={{ color: "var(--danger)", background: "var(--danger-soft)" }}
+          role="alert"
+        >
+          <AlertCircle className="size-4 mt-0.5 shrink-0" strokeWidth={1.6} />
+          <span className="break-words">{error}</span>
+        </div>
+      )}
 
       {/* Tabs */}
       {groupId && (
