@@ -945,11 +945,21 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
             onPointerLeave={handlePointerUp}
           />
 
-          {/* Stamp / media / flipbook overlays. Each overlay's root is
-              pointer-events: none so empty space passes events through
-              to the draw canvas — only the placed items themselves
-              intercept pointer events. */}
-          {stampOverlay}
+          {/* Stamp / media / flipbook overlays. Wrapped in an
+              `isolation: isolate` stacking context so the placed
+              items' inline z-indexes (media.z, stamp transform
+              handles at 9999, …) can't leak out and beat the
+              foreground stroke canvas that sits below in DOM order
+              but is supposed to render on top. The wrapper itself is
+              pointer-events: none so empty space still falls through
+              to the draw canvas; each overlay restores
+              pointer-events: auto on its own draggable items. */}
+          <div
+            className="absolute inset-0"
+            style={{ isolation: "isolate", pointerEvents: "none" }}
+          >
+            {stampOverlay}
+          </div>
 
           {/* Above stroke layer — sits on top of media / stamps so the
               user can scribble directly over a photo. Only captures
