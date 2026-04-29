@@ -395,6 +395,7 @@ export default async function GroupPage({ params }: Props) {
                 isOwner={isOwner}
                 hasBaton={hasBaton}
                 currentUserDisplayName={currentUserDisplayName}
+                currentCoverImage={group.cover_image}
                 members={
                   (members ?? [])
                     .filter((m): m is Member & { user: NonNullable<Member["user"]> } => m.user !== null)
