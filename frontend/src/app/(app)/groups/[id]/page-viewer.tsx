@@ -105,16 +105,25 @@ export function PageViewer({ entries, initialIndex, groupId, groupName, coverIma
   const entry = entries[index];
   const pageNumber = totalCount - index; // newest = totalCount, oldest = 1
   const sortedMedia = entry?.media?.sort((a, b) => a.order - b.order) ?? [];
-  // Canvas image is uploaded to `{group}/{entry}/canvas.png` — split it
-  // from attached photos/videos so the handwritten page renders full-width
-  // in its natural 4:3 aspect ratio.
+  // Canvas images live at well-known names under `{group}/{entry}/`:
+  //   • canvas.png       — strokes + text on the paper (below media)
+  //   • canvas-above.png — strokes drawn in foreground mode, on top
+  //                        of media (only present when the author
+  //                        scribbled in 前面 mode)
   // Match against the path portion only — the storage URL may carry a
-  // query string (cache-bust, signed-URL token, etc.) and `endsWith` would
-  // miss those. Falling back to includes() catches both shapes.
+  // query string (cache-bust, signed-URL token, etc.) and `endsWith`
+  // alone would miss those. Both shapes are covered.
   const canvasMedia = sortedMedia.find(
     (m) => m.type === "image" && (m.url.endsWith("/canvas.png") || m.url.includes("/canvas.png?"))
   ) ?? null;
-  const otherMedia = sortedMedia.filter((m) => m !== canvasMedia);
+  const canvasAboveMedia = sortedMedia.find(
+    (m) =>
+      m.type === "image" &&
+      (m.url.endsWith("/canvas-above.png") || m.url.includes("/canvas-above.png?"))
+  ) ?? null;
+  const otherMedia = sortedMedia.filter(
+    (m) => m !== canvasMedia && m !== canvasAboveMedia
+  );
   // Media with a saved position are rendered as overlays on the canvas
   // (x/y/scale/rotation in 800×600 space). Legacy entries predate the
   // position columns — render those as a thumbnail grid below.
@@ -150,7 +159,13 @@ export function PageViewer({ entries, initialIndex, groupId, groupName, coverIma
   // it they'd have nothing to anchor to and would silently disappear.
   const hasTapes = (entry?.tapes?.length ?? 0) > 0;
   const hasBlocks = (entry?.blocks?.length ?? 0) > 0;
-  const hasCanvasBox = !!canvasMedia || placedMedia.length > 0 || flipbookPlaced || hasTapes || hasBlocks;
+  const hasCanvasBox =
+    !!canvasMedia ||
+    !!canvasAboveMedia ||
+    placedMedia.length > 0 ||
+    flipbookPlaced ||
+    hasTapes ||
+    hasBlocks;
 
   // Per-entry canvas dimensions — new entries store their actual A4
   // values; legacy entries fall back to the original 800×600.
@@ -396,9 +411,15 @@ export function PageViewer({ entries, initialIndex, groupId, groupName, coverIma
         {/* Canvas (handwritten diary page).
             Layers (back to front):
               1. <CanvasBackground /> — SVG notebook ruling / grid / plain
-              2. <Image> — transparent PNG of strokes + text boxes
+              2. <Image canvasMedia> — below strokes + text boxes
               3. <MediaOverlayDisplay> — placed photos/videos
-              4. <EntryStampsDisplay> — positioned stamps */}
+              4. <FlipbookOverlayDisplay> — placed flipbook
+              5. <BlockOverlayDisplay> — profile / structured blocks
+              6. <EntryStampsDisplay> — positioned stamps
+              7. <TapeOverlayDisplay> — washi tape
+              8. <Image canvasAboveMedia> — foreground strokes,
+                 painted on top of every overlay so the user's
+                 scribbles over a photo stay visible */}
         {hasCanvasBox && (
           <div className="mb-6">
             <div
@@ -478,6 +499,15 @@ export function PageViewer({ entries, initialIndex, groupId, groupName, coverIma
                     displayWidth={canvasDisplayWidth}
                   />
                 </div>
+              )}
+              {canvasAboveMedia && (
+                <Image
+                  src={canvasAboveMedia.url}
+                  alt=""
+                  fill
+                  className="object-contain pointer-events-none"
+                  sizes="(max-width: 800px) 100vw, 800px"
+                />
               )}
             </div>
           </div>

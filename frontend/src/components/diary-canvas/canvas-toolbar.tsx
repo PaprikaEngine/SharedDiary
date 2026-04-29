@@ -10,6 +10,11 @@ export type Tool = "select" | "pen" | "eraser" | "text" | "tape" | "highlighter"
 /** Free-form hex string. The preset swatches in `PEN_COLORS` are
  *  convenience shortcuts; the color wheel can produce any hex value. */
 export type PenColor = string;
+/** Which canvas a stroke tool writes to.
+ *  - "below": the paper itself, under placed media (default).
+ *  - "above": a foreground layer on top of media so the user can
+ *    scribble over a photo. */
+export type PenLayer = "below" | "above";
 
 type Props = {
   tool: Tool;
@@ -32,6 +37,8 @@ type Props = {
   onTapePickerClick?: () => void;
   background: BackgroundType;
   onBackgroundChange: (bg: BackgroundType) => void;
+  penLayer: PenLayer;
+  onPenLayerChange: (layer: PenLayer) => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -67,6 +74,8 @@ export function CanvasToolbar({
   onTapePickerClick,
   background,
   onBackgroundChange,
+  penLayer,
+  onPenLayerChange,
   canUndo,
   canRedo,
   onUndo,
@@ -399,23 +408,60 @@ export function CanvasToolbar({
           </div>
         </>
       ) : tool === "pen" || tool === "eraser" || tool === "highlighter" || tool === "neon" ? (
-        <div className="flex items-center gap-1">
-          <span className="text-xs text-ink-light mr-1">線</span>
-          {LINE_WIDTH_LABELS.map((label, i) => (
+        <>
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-ink-light mr-1">線</span>
+            {LINE_WIDTH_LABELS.map((label, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => onLineWidthChange(i)}
+                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                  lineWidthIndex === i
+                    ? "bg-moss text-cream"
+                    : "bg-cream-dark text-ink hover:bg-cream-dark/70"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <Separator />
+
+          {/* Stroke layer — paper vs. foreground.
+              "紙" writes onto the paper itself, beneath placed media
+              (the default behaviour). "前面" writes onto a foreground
+              layer that sits on top of media so the user can scribble
+              directly over a photo. */}
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-ink-light mr-1">面</span>
             <button
-              key={i}
               type="button"
-              onClick={() => onLineWidthChange(i)}
+              onClick={() => onPenLayerChange("below")}
               className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                lineWidthIndex === i
+                penLayer === "below"
                   ? "bg-moss text-cream"
                   : "bg-cream-dark text-ink hover:bg-cream-dark/70"
               }`}
+              title="紙の上に描く（写真の下）"
             >
-              {label}
+              紙
             </button>
-          ))}
-        </div>
+            <button
+              type="button"
+              onClick={() => onPenLayerChange("above")}
+              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                penLayer === "above"
+                  ? "bg-moss text-cream"
+                  : "bg-cream-dark text-ink hover:bg-cream-dark/70"
+              }`}
+              title="写真の上に描く"
+            >
+              前面
+            </button>
+          </div>
+        </>
       ) : (
         // Select tool — no secondary control; a hint is plenty.
         <span className="text-xs text-ink-light">タップで選択 · ドラッグで移動</span>

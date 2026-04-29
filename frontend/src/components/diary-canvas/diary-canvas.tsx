@@ -9,7 +9,7 @@ import {
   useImperativeHandle,
   forwardRef,
 } from "react";
-import { CanvasToolbar, type Tool, type PenColor } from "./canvas-toolbar";
+import { CanvasToolbar, type Tool, type PenColor, type PenLayer } from "./canvas-toolbar";
 import { TextBoxOverlay, FONT_OPTIONS, type TextBox, type FontId, type TextAlign } from "./text-box-overlay";
 import { TAPES, TAPE_ALPHA, type TapeId } from "./tape-patterns";
 
@@ -21,6 +21,14 @@ export type StrokeElement = {
   color: string;
   width: number;
   tool: "pen" | "eraser" | "highlighter" | "neon";
+  /** Which canvas the stroke is committed to.
+   *  - "below" (default): the paper itself, rendered under placed
+   *    media so writing feels like ink on the page.
+   *  - "above": a foreground layer that sits on top of media / stamps
+   *    so the user can scribble directly over a photo.
+   *  Older snapshots predate this field — treat undefined as "below"
+   *  everywhere it's read. */
+  layer?: PenLayer;
 };
 
 export type TextElement = {
@@ -64,6 +72,11 @@ export type DiarySnapshot = {
   textAlign: TextAlign;
   tapeId: TapeId;
   background: BackgroundType;
+  /** Which stroke layer the pen is currently writing to. Persisted so
+   *  the user doesn't have to re-pick "前面" after a draft reload.
+   *  Optional for back-compat with snapshots written before this field
+   *  existed. */
+  penLayer?: PenLayer;
 };
 
 type Props = {
@@ -387,8 +400,18 @@ function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement) {
 
 // --- Exported types ---
 
+/** A single render-to-blob result. Either side may be null when the
+ *  corresponding layer has nothing on it — callers skip uploading
+ *  blank PNGs to keep storage clean. */
+export type DiaryCanvasExport = {
+  /** Strokes + text on the paper, beneath placed media. */
+  below: Blob | null;
+  /** Strokes drawn in foreground mode, on top of media. */
+  above: Blob | null;
+};
+
 export type DiaryCanvasHandle = {
-  exportImage: () => Promise<Blob | null>;
+  exportImages: () => Promise<DiaryCanvasExport>;
   isEmpty: () => boolean;
   getBackground: () => BackgroundType;
 };
@@ -398,6 +421,7 @@ export type DiaryCanvasHandle = {
 export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
   function DiaryCanvas({ width = 800, height = 1131, onScaleChange, stampOverlay, onStampClick, stampCount, extraTapeIds, onTapePickerClick, onCanvasInteract, initialSnapshot, onChange, onToolChange, onTapePlaced, onBlockClick }, ref) {
     const drawCanvasRef = useRef<HTMLCanvasElement>(null);
+    const drawCanvasAboveRef = useRef<HTMLCanvasElement>(null);
     const bgCanvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -417,6 +441,12 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
     const [textAlign, setTextAlign] = useState<TextAlign>(initialSnapshot?.textAlign ?? "left");
     const [tapeId, setTapeId] = useState<TapeId>(initialSnapshot?.tapeId ?? "check-rose");
     const [background, setBackground] = useState<BackgroundType>(initialSnapshot?.background ?? "ruled");
+    // Which stroke layer pen / eraser / highlighter / neon write into.
+    // "below" (default) puts ink on the paper itself — under media.
+    // "above" puts it on a foreground layer so the user can scribble
+    // over a photo. Hidden in non-drawing tools but persisted so a
+    // round-trip through select doesn't reset the choice.
+    const [penLayer, setPenLayer] = useState<PenLayer>(initialSnapshot?.penLayer ?? "below");
 
     const [history, dispatch] = useReducer(historyReducer, {
       // Old drafts (pre-tape-overlay refactor) may contain `type:
@@ -483,15 +513,33 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
         textAlign,
         tapeId,
         background,
+        penLayer,
       });
-    }, [onChange, history.elements, textBoxes, tool, penColor, lineWidthIndex, fontSizeIndex, fontFamily, textAlign, tapeId, background]);
+    }, [onChange, history.elements, textBoxes, tool, penColor, lineWidthIndex, fontSizeIndex, fontFamily, textAlign, tapeId, background, penLayer]);
 
-    // Redraw all elements
+    // Redraw both stroke layers from history. Below holds strokes
+    // tagged "below" (or undefined — legacy snapshots) plus all text
+    // elements; above holds strokes explicitly tagged "above". Text
+    // boxes always live on the below layer for now.
     const redraw = useCallback(() => {
-      const ctx = drawCanvasRef.current?.getContext("2d");
-      if (!ctx) return;
-      ctx.clearRect(0, 0, width, height);
-      for (const el of history.elements) drawElement(ctx, el);
+      const belowCtx = drawCanvasRef.current?.getContext("2d");
+      const aboveCtx = drawCanvasAboveRef.current?.getContext("2d");
+      if (belowCtx) {
+        belowCtx.clearRect(0, 0, width, height);
+        for (const el of history.elements) {
+          if (el.type === "stroke") {
+            if ((el.layer ?? "below") === "below") drawElement(belowCtx, el);
+          } else {
+            drawElement(belowCtx, el);
+          }
+        }
+      }
+      if (aboveCtx) {
+        aboveCtx.clearRect(0, 0, width, height);
+        for (const el of history.elements) {
+          if (el.type === "stroke" && el.layer === "above") drawElement(aboveCtx, el);
+        }
+      }
     }, [history.elements, width, height]);
 
     useEffect(() => {
@@ -501,6 +549,8 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
     // --- Pointer helpers ---
 
     const getPoint = (e: React.PointerEvent) => {
+      // Both stroke canvases overlay the same area, so either bounding
+      // rect resolves the same pointer position.
       const rect = drawCanvasRef.current?.getBoundingClientRect();
       if (!rect) return { x: 0, y: 0 };
       return {
@@ -509,7 +559,7 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
       };
     };
 
-    const handlePointerDown = (e: React.PointerEvent) => {
+    const handlePointerDown = (e: React.PointerEvent, capturingLayer: PenLayer) => {
       // Any interaction on the draw canvas itself clears overlay
       // selections so clicking empty space deselects the current stamp
       // / media / flipbook.
@@ -521,6 +571,11 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
       if (tool === "select" || tool === "text") return;
 
       if (tool === "tape") {
+        // Tape always previews / commits on the below canvas — even
+        // when the user has the foreground stroke layer toggled on,
+        // washi tape conceptually goes on top of the page beneath
+        // photos. (The placed-tape overlay sits above stamps later.)
+        if (capturingLayer !== "below") return;
         e.preventDefault();
         drawCanvasRef.current?.setPointerCapture(e.pointerId);
         setIsDrawing(true);
@@ -542,8 +597,13 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
       ) {
         return;
       }
+      // Only the canvas matching the active layer captures the
+      // pointer; the other stays inert via pointer-events: none, so
+      // we'd never be invoked there.
+      if (capturingLayer !== penLayer) return;
       e.preventDefault();
-      drawCanvasRef.current?.setPointerCapture(e.pointerId);
+      const target = capturingLayer === "below" ? drawCanvasRef.current : drawCanvasAboveRef.current;
+      target?.setPointerCapture(e.pointerId);
       setIsDrawing(true);
       const pt = getPoint(e);
       currentStrokeRef.current = {
@@ -553,6 +613,7 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
         width:
           tool === "eraser" ? ERASER_WIDTH : widthForTool(tool, lineWidthIndex),
         tool,
+        layer: capturingLayer,
       };
     };
 
@@ -566,8 +627,16 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
         currentTapeRef.current.y2 = pt.y;
         const ctx = drawCanvasRef.current?.getContext("2d");
         if (!ctx) return;
+        // Repaint the below canvas only (below-layer strokes + text)
+        // and stack the tape preview on top.
         ctx.clearRect(0, 0, width, height);
-        for (const el of elementsRef.current) drawElement(ctx, el);
+        for (const el of elementsRef.current) {
+          if (el.type === "stroke") {
+            if ((el.layer ?? "below") === "below") drawElement(ctx, el);
+          } else {
+            drawElement(ctx, el);
+          }
+        }
         drawTape(ctx, currentTapeRef.current);
         return;
       }
@@ -576,10 +645,18 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
       e.preventDefault();
       currentStrokeRef.current.points.push(getPoint(e));
 
-      const ctx = drawCanvasRef.current?.getContext("2d");
+      const layer = currentStrokeRef.current.layer ?? "below";
+      const canvas = layer === "below" ? drawCanvasRef.current : drawCanvasAboveRef.current;
+      const ctx = canvas?.getContext("2d");
       if (!ctx) return;
       ctx.clearRect(0, 0, width, height);
-      for (const el of elementsRef.current) drawElement(ctx, el);
+      for (const el of elementsRef.current) {
+        if (el.type === "stroke") {
+          if ((el.layer ?? "below") === layer) drawElement(ctx, el);
+        } else if (layer === "below") {
+          drawElement(ctx, el);
+        }
+      }
       drawStroke(ctx, currentStrokeRef.current);
     };
 
@@ -613,11 +690,18 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
         }
         // Wipe the preview either way — committed tapes show up as a
         // DOM overlay on the next render, and abandoned ones should
-        // disappear immediately.
+        // disappear immediately. Only repaint the below canvas, since
+        // the tape preview lived there.
         const ctx = drawCanvasRef.current?.getContext("2d");
         if (ctx) {
           ctx.clearRect(0, 0, width, height);
-          for (const el of elementsRef.current) drawElement(ctx, el);
+          for (const el of elementsRef.current) {
+            if (el.type === "stroke") {
+              if ((el.layer ?? "below") === "below") drawElement(ctx, el);
+            } else {
+              drawElement(ctx, el);
+            }
+          }
         }
         return;
       }
@@ -649,9 +733,31 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
 
     // --- Export ---
 
-    const exportImage = useCallback(async (): Promise<Blob | null> => {
-      const draw = drawCanvasRef.current;
-      if (!draw) return null;
+    const exportImages = useCallback(async (): Promise<DiaryCanvasExport> => {
+      const drawBelow = drawCanvasRef.current;
+      const drawAbove = drawCanvasAboveRef.current;
+
+      const belowStrokeCount = history.elements.filter(
+        (el) => el.type === "stroke" && (el.layer ?? "below") === "below"
+      ).length;
+      const aboveStrokeCount = history.elements.filter(
+        (el) => el.type === "stroke" && el.layer === "above"
+      ).length;
+      const hasTextBoxes = textBoxes.some((b) => b.text.trim());
+
+      // The above layer is just strokes — no text boxes, no extra
+      // composition — so we can blob the canvas directly when there's
+      // anything on it. Returns null otherwise so the caller skips an
+      // empty upload.
+      const aboveBlob = aboveStrokeCount > 0 && drawAbove
+        ? await new Promise<Blob | null>((resolve) =>
+            drawAbove.toBlob((b) => resolve(b), "image/png")
+          )
+        : null;
+
+      if (!drawBelow || (belowStrokeCount === 0 && !hasTextBoxes)) {
+        return { below: null, above: aboveBlob };
+      }
 
       // Export a transparent PNG containing only strokes + text. The
       // notebook ruling / grid is rendered with CSS at view time based on
@@ -661,9 +767,9 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
       c.width = width;
       c.height = height;
       const ctx = c.getContext("2d");
-      if (!ctx) return null;
+      if (!ctx) return { below: null, above: aboveBlob };
 
-      ctx.drawImage(draw, 0, 0);
+      ctx.drawImage(drawBelow, 0, 0);
 
       // Draw text boxes onto export canvas
       for (const box of textBoxes) {
@@ -726,8 +832,11 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
         ctx.restore();
       }
 
-      return new Promise((resolve) => c.toBlob((b) => resolve(b), "image/png"));
-    }, [width, height, textBoxes]);
+      const belowBlob = await new Promise<Blob | null>((resolve) =>
+        c.toBlob((b) => resolve(b), "image/png")
+      );
+      return { below: belowBlob, above: aboveBlob };
+    }, [width, height, textBoxes, history.elements]);
 
     const isEmpty = useCallback(
       () => history.elements.length === 0 && textBoxes.every((b) => !b.text.trim()),
@@ -736,8 +845,8 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
 
     // Expose handle to parent via ref
     const getBackground = useCallback(() => background, [background]);
-    useImperativeHandle(ref, () => ({ exportImage, isEmpty, getBackground }), [
-      exportImage,
+    useImperativeHandle(ref, () => ({ exportImages, isEmpty, getBackground }), [
+      exportImages,
       isEmpty,
       getBackground,
     ]);
@@ -746,6 +855,20 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
       setTool(t);
       onToolChange?.(t);
     };
+
+    const isStrokeTool =
+      tool === "pen" ||
+      tool === "eraser" ||
+      tool === "highlighter" ||
+      tool === "neon";
+    const cursorForCanvas =
+      tool === "select"
+        ? "default"
+        : tool === "text"
+        ? "text"
+        : tool === "eraser"
+        ? "cell"
+        : "crosshair";
 
     return (
       <div ref={containerRef} className="w-full">
@@ -768,6 +891,8 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
           onTapePickerClick={onTapePickerClick}
           background={background}
           onBackgroundChange={setBackground}
+          penLayer={penLayer}
+          onPenLayerChange={setPenLayer}
           canUndo={history.elements.length > 0}
           canRedo={history.undone.length > 0}
           onUndo={handleUndo}
@@ -794,6 +919,11 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
             style={{ width: width * scale, height: height * scale }}
           />
 
+          {/* Below stroke layer — sits on the paper, beneath placed
+              media. Captures pointer events for tape (always lives on
+              this layer) and for stroke tools when penLayer is "below";
+              otherwise stays inert so events fall through to the
+              overlay or the above canvas. */}
           <canvas
             ref={drawCanvasRef}
             width={width}
@@ -802,17 +932,14 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
             style={{
               width: width * scale,
               height: height * scale,
-              cursor:
-                tool === "select"
-                  ? "default"
-                  : tool === "text"
-                  ? "text"
-                  : tool === "eraser"
-                  ? "cell"
-                  : "crosshair",
+              cursor: cursorForCanvas,
               touchAction: "none",
+              pointerEvents:
+                tool === "tape" || (isStrokeTool && penLayer === "below")
+                  ? "auto"
+                  : "none",
             }}
-            onPointerDown={handlePointerDown}
+            onPointerDown={(e) => handlePointerDown(e, "below")}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerUp}
@@ -823,6 +950,28 @@ export const DiaryCanvas = forwardRef<DiaryCanvasHandle, Props>(
               to the draw canvas — only the placed items themselves
               intercept pointer events. */}
           {stampOverlay}
+
+          {/* Above stroke layer — sits on top of media / stamps so the
+              user can scribble directly over a photo. Only captures
+              events when a stroke tool is active in foreground mode;
+              otherwise it stays transparent to input. */}
+          <canvas
+            ref={drawCanvasAboveRef}
+            width={width}
+            height={height}
+            className="absolute inset-0"
+            style={{
+              width: width * scale,
+              height: height * scale,
+              cursor: cursorForCanvas,
+              touchAction: "none",
+              pointerEvents: isStrokeTool && penLayer === "above" ? "auto" : "none",
+            }}
+            onPointerDown={(e) => handlePointerDown(e, "above")}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
+          />
 
           {/* Text box overlay */}
           <TextBoxOverlay

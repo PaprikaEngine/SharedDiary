@@ -585,20 +585,38 @@ export function EntryComposer({ groupId, mode, profileMember }: Props) {
     const { data: entry, error: entryError } = await (supabase as any).from("entries").insert(entryInsert).select().single();
     if (entryError) { setError(entryError.message); setLoading(false); return; }
 
+    // The handwritten canvas is split into two transparent PNGs:
+    //   • canvas.png       — strokes / text on the paper, under media
+    //   • canvas-above.png — strokes drawn in foreground mode, on top
+    //                        of placed media so the user can scribble
+    //                        directly over a photo
+    // Either side is omitted when its layer is empty so we don't
+    // upload blank PNGs.
+    let mediaOrderStart = 0;
     if (!canvasEmpty && canvasRef.current) {
-      const blob = await canvasRef.current.exportImage();
-      if (blob) {
+      const { below, above } = await canvasRef.current.exportImages();
+      if (below) {
         const path = `${groupId}/${entry.id}/canvas.png`;
-        const { error: upErr } = await supabase.storage.from("media").upload(path, blob, { contentType: "image/png" });
+        const { error: upErr } = await supabase.storage.from("media").upload(path, below, { contentType: "image/png" });
         if (!upErr) {
           const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(path);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any).from("entry_media").insert({ entry_id: entry.id, type: "image", url: publicUrl, order: 0 });
+          await (supabase as any).from("entry_media").insert({ entry_id: entry.id, type: "image", url: publicUrl, order: mediaOrderStart });
+          mediaOrderStart++;
+        }
+      }
+      if (above) {
+        const path = `${groupId}/${entry.id}/canvas-above.png`;
+        const { error: upErr } = await supabase.storage.from("media").upload(path, above, { contentType: "image/png" });
+        if (!upErr) {
+          const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(path);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any).from("entry_media").insert({ entry_id: entry.id, type: "image", url: publicUrl, order: mediaOrderStart });
+          mediaOrderStart++;
         }
       }
     }
 
-    const mediaOrderStart = canvasEmpty ? 0 : 1;
     for (let i = 0; i < placedMedia.length; i++) {
       const m = placedMedia[i];
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
